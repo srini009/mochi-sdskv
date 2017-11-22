@@ -5,8 +5,9 @@ int main(int argc, char **argv) {
 
   assert(argc == 2);
   char *addr_str = argv[1];
-  
-  margo_instance_id mid = kv_margo_init(kv_protocol(addr_str), MARGO_SERVER_MODE);
+
+  margo_instance_id mid = margo_init(argv[1] == NULL ? "ofi+tcp://" : argv[1],
+	 MARGO_SERVER_MODE, 0, -1);
   kv_context_t *context = kv_server_register(mid);
 
   hg_return_t ret;

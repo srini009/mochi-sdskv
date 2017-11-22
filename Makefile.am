@@ -1,8 +1,5 @@
 ACLOCAL_AMFLAGS="-Im4"
 
-pkgconfigdir = $(libdir)/pkgconfig
-pkgconfig_DATA = maint/sds-keyval.pc
-
 bin_PROGRAMS = test/bench-client \
 	       test/test-client \
 	       test/test-server
@@ -11,6 +8,7 @@ test_bench_client_CXXFLAGS = -pthread -std=c++11 -g -Wall -mcx16 -Wno-invalid-of
 test_bench_client_CPPFLAGS = ${CPPFLAGS} -I${srcdir}/src
 test_bench_client_DEPENDENCIES = lib/libkvclient.la
 test_bench_client_LDFLAGS = -Llib -lkvclient
+test_bench_client_LDADD = ${LIBS} -lkvclient
 
 lib_LTLIBRARIES = lib/libkvclient.la \
                   lib/libkvserver.la \
@@ -50,16 +48,6 @@ check_PROGRAMS = test/test-client \
 		test/test-mpi \
 		test/test-mpi-group
 
-
-check_PROGRAMS = test/bench-client \
-		 test/test-client \
-		 test/test-server \
-		 test/test-mpi \
-		 test/test-mpi-group
-
-test_bench_client_SOURCES = test/bench-client.cc
-test_bench_client_CPPFLAGS = ${CPPFLAGS} -I${srcdir}/src
-test_bench_client_LDADD = ${LIBS} -lkvclient
 
 TESTS = test/test-client \
         test/test-server \

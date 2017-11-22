@@ -289,7 +289,6 @@ static inline hg_return_t hg_proc_bench_result_t(hg_proc_t proc, void *data)
 MERCURY_GEN_PROC(bench_in_t, ((int32_t)(count)))
 MERCURY_GEN_PROC(bench_out_t, ((bench_result_t)(result)))
 DECLARE_MARGO_RPC_HANDLER(bench_handler)
-MERCURY_GEN_PROC(bench_out_t, ((bench_result)(result)) )
 
 
 // kv-client API

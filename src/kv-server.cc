@@ -60,6 +60,7 @@ static hg_return_t open_handler(hg_handle_t handle)
 #endif
       out.ret = HG_OTHER_ERROR;
     }
+  }
 
     ret = margo_respond(handle, &out);
     assert(ret == HG_SUCCESS);
@@ -487,7 +488,6 @@ static hg_return_t bench_handler(hg_handle_t handle)
   return HG_SUCCESS;
 }
 DEFINE_MARGO_RPC_HANDLER(bench_handler)
-#endif
 
 kv_context_t *kv_server_register(const margo_instance_id mid)
 {
@@ -545,7 +545,7 @@ kv_context_t *kv_server_register(const margo_instance_id mid)
 
     context->shutdown_id = MARGO_REGISTER(context->mid, "shutdown",
 	    void, void, shutdown_handler);
-
+    return context;
 }
 
 hg_return_t kv_server_wait_for_shutdown(kv_context_t *context) {
