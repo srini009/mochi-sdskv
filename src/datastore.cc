@@ -2,6 +2,7 @@
 // All rights reserved.
 #include "datastore.h"
 #include <chrono>
+#include <iostream>
 
 #include <boost/filesystem.hpp>
 
