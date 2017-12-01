@@ -294,6 +294,7 @@ bench_result_t *kv_benchmark(kv_context_t *context, int32_t count) {
 	    context->bench_id, &handle);
     assert(ret == HG_SUCCESS);
 
+    bench_in.count = count;
     ret = margo_forward(handle, &bench_in);
     assert(ret == HG_SUCCESS);
 
