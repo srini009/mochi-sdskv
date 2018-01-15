@@ -131,6 +131,18 @@ bool BwTreeDataStore::get(ds_bulk_t &key, std::vector<ds_bulk_t> &data) {
 
 void BwTreeDataStore::BwTreeDataStore::set_in_memory(bool enable)
 {};
+
+std::vector<ds_bulk_t>* BwTreeDataStore::BwTreeDataStore::list(ds_bulk_t &start, size_t count)
+{
+    auto keys = new std::vector<ds_bulk_t>;
+    auto it = _tree->Begin(start);
+    while (it.IsEnd() == false) {
+	/* BUG: bwtree doesn't support "list keys" or "get a key" */
+	//keys->push_back(it.GetLeafNode());
+    }
+
+    return keys;
+}
 #elif USE_LEVELDB
 LevelDBDataStore::LevelDBDataStore() :
   AbstractDataStore(Duplicates::IGNORE, false, false) {
@@ -244,6 +256,20 @@ bool LevelDBDataStore::get(ds_bulk_t &key, std::vector<ds_bulk_t> &data) {
 
 void LevelDBDataStore::LevelDBDataStore::set_in_memory(bool enable)
 {};
+
+std::vector<ds_bulk_t>* LevelDBDataStore::LevelDBDataStore::list(ds_bulk_t &start, size_t count)
+{
+    auto keys = new std::vector<ds_bulk_t>;
+
+    leveldb::Iterator *it = _dbm->NewIterator(leveldb::ReadOptions());
+    ds_bulk_t k;
+    for (it->SeekToFirst(); it->Valid(); it->Next() ) {
+	k.resize(it->key().size());
+	memcpy(&(k[0]), it->key().data(), it->key().size() );
+	keys->push_back(k);
+    }
+    return keys;
+}
 #elif USE_BDB
 BerkeleyDBDataStore::BerkeleyDBDataStore() :
   AbstractDataStore(Duplicates::IGNORE, false, false) {
@@ -444,6 +470,23 @@ bool BerkeleyDBDataStore::get(ds_bulk_t &key, std::vector<ds_bulk_t> &data) {
 void BerkeleyDBDataStore::BerkeleyDBDataStore::set_in_memory(bool enable) {
   _in_memory = enable;
 };
+
+std::vector<ds_bulk_t>* BerkeleyDBDataStore::BerkeleyDBDataStore::list(ds_bulk_t &start, size_t count)
+{
+    auto keys = new std::vector<ds_bulk_t>;
+    Dbc * cursorp;
+    Dbt key, data;
+    ds_bulk_t k;
+    int ret;
+    _dbm->cursor(NULL, &cursorp, DB_SET_RANGE);
+    while (ret = cursorp->get(&key, &data, DB_NEXT) == 0) {
+	k.resize(key.get_size());
+	memcpy(&(k[0]), key.get_data(), key.get_size());
+	/* I hope this is a deep copy! */
+	keys->push_back(k);
+    }
+    return keys;
+}
 #else
 #error "No backend for datastore selected"
 #endif

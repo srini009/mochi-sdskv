@@ -349,6 +349,30 @@ static hg_return_t bulk_get_handler(hg_handle_t handle)
 }
 DEFINE_MARGO_RPC_HANDLER(bulk_get_handler)
 
+static hg_return_t list_handler(hg_handle_t handle)
+{
+    hg_return_t ret;
+    margo_instance_id mid;
+    list_in_t list_in;
+    list_out_t list_out;
+
+    std::vector<char> start{};
+    margo_get_input(handle, &list_in);
+
+
+    auto keys = datastore->list(start, list_in.max_keys);
+    for (auto i: *keys) {
+	std::cout << "as string" << std::string(i.data()) << " ";
+	std::cout << "as int" << *(int *)(i.data()) << " ";
+    }
+    ret = margo_respond(handle, &list_out);
+    margo_free_input(handle, &list_in);
+    margo_destroy(handle);
+
+    return HG_SUCCESS;
+}
+DEFINE_MARGO_RPC_HANDLER(list_handler)
+
 static void shutdown_handler(hg_handle_t handle)
 {
   hg_return_t ret;
@@ -555,6 +579,10 @@ kv_context_t *kv_server_register(const margo_instance_id mid)
 
     context->shutdown_id = MARGO_REGISTER(context->mid, "shutdown",
 	    void, void, shutdown_handler);
+
+    context->list_id = MARGO_REGISTER(context->mid, "list",
+	    list_in_t, list_out_t, list_handler);
+
     return context;
 }
 

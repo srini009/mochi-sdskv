@@ -59,6 +59,28 @@ hg_return_t kv_get(kv_database_t *db, void *key, hg_size_t ksize,
 	void *value, hg_size_t *vsize);
 hg_return_t kv_close(kv_database_t * db);
 
+hg_return_t kv_list_keys(kv_database_t *db,     // db instance
+         const void *start_key,  // we want keys strictly after this start_key
+         hg_size_t start_ksize,  // size of the start_key
+         void **keys,            // pointer to an array of void* pointers,
+                                 //     this array has size *max_keys
+         hg_size_t* ksizes,      // pointer to an array of hg_size_t sizes
+                                 //    representing sizes allocated in
+                                 //     keys for each key
+         hg_size_t* max_keys);   // maximum number of keys requested
+
+hg_return_t kv_list_keys_with_prefix(kv_database_t *db,
+         const void *start_key,  // we want keys strictly after this start_key
+         hg_size_t start_ksize,  // size of the start_key
+	 const void *prefix,     // return only keys that begin with 'prefix'
+	 hg_size_t prefix_size,
+         void **keys,            // pointer to an array of void* pointers,
+                                 // this array has size *max_keys
+         hg_size_t* ksizes,      // pointer to an array of hg_size_t sizes 
+                                 // representing sizes allocated in
+                                 // keys for each key
+         hg_size_t* max_keys);   // maximum number of keys requested
+
 // benchmark routine
 bench_result_t *kv_benchmark(kv_database_t *context, int32_t count);
 

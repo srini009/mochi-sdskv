@@ -66,6 +66,20 @@ int main(int argc, char **argv) {
     std::cout << "remote_bulk_val: " << remote_bulk_val[0] << std::endl;
   }
 
+  /* listing all keys in DB */
+  int start_key=0;
+  hg_size_t max_keys=10;
+  void *keys;
+  hg_size_t *sizes;
+  keys = (void *)calloc(max_keys, sizeof(void *));
+  sizes = (hg_size_t *)calloc(max_keys, sizeof(*sizes));
+
+  ret = kv_list_keys(db, &start_key, sizeof(start_key),
+	  &keys, sizes, &max_keys);
+  for(int i=0; i< max_keys; i++) {
+      printf("found: %d of %d: %d (%zd)\n", i+1, max_keys, ((int*)keys)[i], sizes[i]);
+  }
+
   bench_result_t *output;
   output = kv_benchmark(db, 1000);
   printf("inserts: %zd keys in %f seconds: %f Million-inserts per sec\n",

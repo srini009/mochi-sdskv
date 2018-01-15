@@ -35,6 +35,7 @@ typedef struct kv_context_s {
 	hg_id_t close_id;
 	hg_id_t bench_id;
 	hg_id_t shutdown_id;
+	hg_id_t list_id;
 	kv_id kv;
 } kv_context_t;
 
@@ -51,6 +52,7 @@ typedef struct kv_database_s  {
 	hg_handle_t bulk_get_handle;
 	hg_handle_t shutdown_handle;
 	hg_handle_t bench_handle;
+	hg_handle_t list_handle;
 } kv_database_t;
 
 
@@ -261,6 +263,12 @@ DECLARE_MARGO_RPC_HANDLER(bulk_get_handler)
 
 DECLARE_MARGO_RPC_HANDLER(shutdown_handler)
 
+MERCURY_GEN_PROC(list_in_t, ((hg_size_t)(start))
+	    ((hg_size_t) (max_keys)) )
+MERCURY_GEN_PROC(list_out_t, ((hg_size_t)(nkeys))
+	    ((hg_bulk_t)(bulk_keys))
+	    ((hg_bulk_t)(bulk_sizes)) )
+DECLARE_MARGO_RPC_HANDLER(list_keys_handler)
 
 // some setup to support simple benchmarking
 static inline hg_return_t hg_proc_double(hg_proc_t proc, void *data)
