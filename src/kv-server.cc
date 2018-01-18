@@ -359,8 +359,9 @@ static hg_return_t list_handler(hg_handle_t handle)
     std::vector<char> start{};
     margo_get_input(handle, &list_in);
 
-
-    auto keys = datastore->list(start, list_in.max_keys);
+    std::cout << "max_keys: " << list_in.list_in.max_keys;
+    auto keys = datastore->list(start, list_in.list_in.max_keys);
+    std::cout << " found " << start.size() << " keys" << std::endl;
     for (auto i: *keys) {
 	std::cout << "as string" << std::string(i.data()) << " ";
 	std::cout << "as int" << *(int *)(i.data()) << " ";

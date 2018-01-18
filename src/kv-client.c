@@ -285,13 +285,20 @@ hg_return_t kv_list_keys(kv_database_t *db,
     list_in_t list_in;
     list_out_t list_out;
     int ret = HG_SUCCESS;
+    int i;
 
-    list_in.start = (hg_size_t) start_key;
-    list_in.max_keys = *max_keys;
+    list_in.list_in.start_key = (kv_data_t) start_key;
+    list_in.list_in.start_ksize = start_ksize;
+    list_in.list_in.max_keys = *max_keys;
+
     ret = margo_forward(db->list_handle, &list_in);
-    /* TODO: unpack list_out into something client can use */
     ret = margo_get_output(db->list_handle, &list_out);
 
+    *max_keys = list_out.list_out.nkeys;
+    for (i=0; i<list_out.list_out.nkeys; i++) {
+	ksizes[i] = list_out.list_out.ksizes[i];
+	memcpy(keys[i], list_out.list_out.keys[i], list_out.list_out.ksizes[i]);
+    }
     margo_free_output(db->list_handle, &list_out);
 
     return ret;
