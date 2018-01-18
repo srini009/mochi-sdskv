@@ -67,15 +67,17 @@ int main(int argc, char **argv) {
   }
 
   /* listing all keys in DB */
-  int start_key=0;
+  int i, start_key=0;
   hg_size_t max_keys=10;
-  void *keys;
+  void **keys;
   hg_size_t *sizes;
-  keys = (void *)calloc(max_keys, sizeof(void *));
+  keys = (void **)calloc(max_keys, sizeof(void *));
+  for (i=0; i< max_keys; i++)
+      keys[i] = calloc(1, sizeof(int));
   sizes = (hg_size_t *)calloc(max_keys, sizeof(*sizes));
 
   ret = kv_list_keys(db, &start_key, sizeof(start_key),
-	  &keys, sizes, &max_keys);
+	  keys, sizes, &max_keys);
   for(int i=0; i< max_keys; i++) {
       printf("found: %d of %d: %d (%zd)\n", i+1, max_keys, ((int*)keys)[i], sizes[i]);
   }
