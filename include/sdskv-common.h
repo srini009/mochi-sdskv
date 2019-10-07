@@ -40,7 +40,8 @@ typedef uint64_t sdskv_database_id_t;
 #define SDSKV_ERR_REMI        -15 /* REMI-related error */
 #define SDSKV_ERR_ARGOBOTS    -16 /* Argobots related error */
 #define SDSKV_ERR_KEYEXISTS   -17 /* Put operation would override data */
-#define SDSKV_ERR_END         -18 /* End of range for valid error codes */
+#define SDSKV_ERR_POOLSET     -18 /* Poolset cannot be changed because it is currently used */
+#define SDSKV_ERR_END         -19 /* End of range for valid error codes */
 
 const char* const sdskv_error_messages[] = {
     "",
@@ -60,7 +61,8 @@ const char* const sdskv_error_messages[] = {
     "Invalid comparison function",
     "REMI error",
     "Argobots error",
-    "Key exists"
+    "Key exists",
+    "Poolset related error"
 };
 
 #if defined(__cplusplus)
