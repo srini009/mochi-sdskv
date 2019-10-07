@@ -32,6 +32,24 @@ extern int32_t sdskv_remi_errno;
 int sdskv_client_init(margo_instance_id mid, sdskv_client_t* client);
 
 /**
+ * @brief Configures the poolset of a client so that it can reuse bulk handles.
+ *
+ * @param client SDSKV client
+ * @param npools Number of pools to create
+ * @param nbufs Number of buffers in each pool
+ * @param first_size Size of the buffers in the first pool
+ * @param size_multiple Size factor from a pool to the next one
+ *
+ * @return SDSKV_SUCCESS or error code defined in sdskv-common.h
+ */
+int sdskv_client_configure_bulk_poolset(
+        sdskv_client_t client, 
+        hg_size_t npools,
+        hg_size_t nbufs,
+        hg_size_t first_size,
+        hg_size_t size_multiple);
+
+/**
  * @brief Finalizes a SDSKV client.
  *
  * @param[in] client SDSKV client to finalize
