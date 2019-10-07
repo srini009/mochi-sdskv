@@ -7,6 +7,8 @@
 #include <map>
 #include <iostream>
 #include <unordered_map>
+#include <margo.h>
+#include <margo-bulk-pool.h>
 #ifdef USE_REMI
 #include <remi/remi-client.h>
 #include <remi/remi-server.h>
@@ -60,6 +62,8 @@ struct sdskv_server_context_t
     hg_id_t sdskv_migrate_keys_prefixed_id;
     hg_id_t sdskv_migrate_all_keys_id;
     hg_id_t sdskv_migrate_database_id;
+
+    margo_bulk_poolset_t poolset = nullptr;
 };
 
 template<typename F>
@@ -320,6 +324,21 @@ extern "C" int sdskv_provider_register(
     if(provider != SDSKV_PROVIDER_IGNORE)
         *provider = tmp_svr_ctx;
 
+    return SDSKV_SUCCESS;
+}
+
+extern "C" int sdskv_provider_configure_bulk_poolset(
+        sdskv_provider_t provider,
+        hg_size_t npools,
+        hg_size_t nbufs,
+        hg_size_t first_size,
+        hg_size_t size_multiple)
+{
+    if(provider->poolset) return SDSKV_ERR_POOLSET;
+    hg_return_t ret = margo_bulk_poolset_create(
+            provider->mid, npools, nbufs, first_size, size_multiple, HG_BULK_READWRITE,
+            &(provider->poolset));
+    if(ret != 0) return SDSKV_ERR_POOLSET;
     return SDSKV_SUCCESS;
 }
 

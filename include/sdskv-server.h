@@ -53,6 +53,24 @@ int sdskv_provider_register(
         sdskv_provider_t* provider);
 
 /**
+ * @brief Configures the poolset of a provider so that it can reuse bulk handles.
+ *
+ * @param provider SDSKV provider
+ * @param npools Number of pools to create
+ * @param nbufs Number of buffers in each pool
+ * @param first_size Size of the buffers in the first pool
+ * @param size_multiple Size factor from a pool to the next one
+ *
+ * @return SDSKV_SUCCESS or error code defined in sdskv-common.h
+ */
+int sdskv_provider_configure_bulk_poolset(
+        sdskv_provider_t provider,
+        hg_size_t npools,
+        hg_size_t nbufs,
+        hg_size_t first_size,
+        hg_size_t size_multiple);
+
+/**
  * @brief Deregister the provider's RPCs and destroys the provider.
  *
  * @param provider Provider to destroy.
