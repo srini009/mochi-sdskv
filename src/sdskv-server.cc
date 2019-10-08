@@ -709,14 +709,13 @@ static void sdskv_put_multi_ult(hg_handle_t handle)
     put_multi_in_t in;
     put_multi_out_t out;
     out.ret = SDSKV_SUCCESS;
-    std::vector<char> local_keys_buffer;
-    std::vector<char> local_vals_buffer;
+    char* local_keys_buffer;
+    char* local_vals_buffer;
     hg_bulk_t local_keys_bulk_handle;
     hg_bulk_t local_vals_bulk_handle;
 
-    auto r1 = at_exit([&handle]() { margo_destroy(handle); });
-    auto r2 = at_exit([&handle,&out]() { margo_respond(handle, &out); });
-
+    auto _destroy_margo = at_exit([&handle]() { margo_destroy(handle); });
+    auto _send_response = at_exit([&handle,&out]() { margo_respond(handle, &out); });
 
     margo_instance_id mid = margo_hg_handle_get_instance(handle);
     const struct hg_info* info = margo_get_info(handle);
@@ -732,7 +731,7 @@ static void sdskv_put_multi_ult(hg_handle_t handle)
         out.ret = SDSKV_ERR_MERCURY;
         return;
     }
-    auto r3 = at_exit([&handle,&in]() { margo_free_input(handle, &in); });
+    auto _free_input = at_exit([&handle,&in]() { margo_free_input(handle, &in); });
 
     ABT_rwlock_rdlock(svr_ctx->lock);
     auto it = svr_ctx->databases.find(in.db_id);
@@ -745,10 +744,14 @@ static void sdskv_put_multi_ult(hg_handle_t handle)
     ABT_rwlock_unlock(svr_ctx->lock);
 
     // allocate a buffer to receive the keys and a buffer to receive the values
-    local_keys_buffer.resize(in.keys_bulk_size);
-    local_vals_buffer.resize(in.vals_bulk_size);
-    std::vector<void*> keys_addr(1); keys_addr[0] = (void*)local_keys_buffer.data();
-    std::vector<void*> vals_addr(1); vals_addr[0] = (void*)local_vals_buffer.data();
+    local_keys_buffer = (char*)malloc(in.keys_bulk_size);
+    local_vals_buffer = (char*)malloc(in.vals_bulk_size);
+    std::vector<void*> keys_addr(1); keys_addr[0] = local_keys_buffer;
+    std::vector<void*> vals_addr(1); vals_addr[0] = local_vals_buffer;
+    auto _free_buffers = at_exit([local_keys_buffer, local_vals_buffer]() {
+            free(local_keys_buffer);
+            free(local_vals_buffer);
+        });
     
     /* create bulk handle to receive keys */
     hret = margo_bulk_create(mid, 1, keys_addr.data(), &in.keys_bulk_size,
@@ -757,7 +760,7 @@ static void sdskv_put_multi_ult(hg_handle_t handle)
         out.ret = SDSKV_ERR_MERCURY;
         return;
     }
-    auto r6 = at_exit([&local_keys_bulk_handle]() { margo_bulk_free(local_keys_bulk_handle); });
+    auto _free_keys_bulk = at_exit([&local_keys_bulk_handle]() { margo_bulk_free(local_keys_bulk_handle); });
 
     /* create bulk handle to receive values */
     hret = margo_bulk_create(mid, 1, vals_addr.data(), &in.vals_bulk_size,
@@ -766,7 +769,7 @@ static void sdskv_put_multi_ult(hg_handle_t handle)
         out.ret = SDSKV_ERR_MERCURY;
         return;
     }
-    auto r7 = at_exit([&local_vals_bulk_handle]() { margo_bulk_free(local_vals_bulk_handle); });
+    auto _free_vals_bulk = at_exit([&local_vals_bulk_handle]() { margo_bulk_free(local_vals_bulk_handle); });
 
     /* transfer keys */
     hret = margo_bulk_transfer(mid, HG_BULK_PULL, info->addr, in.keys_bulk_handle, 0,
@@ -785,9 +788,9 @@ static void sdskv_put_multi_ult(hg_handle_t handle)
     }
 
     /* interpret beginning of the key buffer as a list of key sizes */
-    hg_size_t* key_sizes = (hg_size_t*)local_keys_buffer.data();
+    hg_size_t* key_sizes = (hg_size_t*)local_keys_buffer;
     /* interpret beginning of the value buffer as a list of value sizes */
-    hg_size_t* val_sizes = (hg_size_t*)local_vals_buffer.data();
+    hg_size_t* val_sizes = (hg_size_t*)local_vals_buffer;
 
     /* go through the key/value pairs and insert them */
     uint64_t keys_offset = sizeof(hg_size_t)*in.num_keys;
@@ -795,8 +798,8 @@ static void sdskv_put_multi_ult(hg_handle_t handle)
     std::vector<const void*> kptrs(in.num_keys);
     std::vector<const void*> vptrs(in.num_keys);
     for(unsigned i=0; i < in.num_keys; i++) {
-        kptrs[i] = local_keys_buffer.data()+keys_offset;
-        vptrs[i] = val_sizes[i] == 0 ? nullptr : local_vals_buffer.data()+vals_offset;
+        kptrs[i] = local_keys_buffer+keys_offset;
+        vptrs[i] = val_sizes[i] == 0 ? nullptr : local_vals_buffer+vals_offset;
         keys_offset += key_sizes[i];
         vals_offset += val_sizes[i];
     }
@@ -815,8 +818,7 @@ static void sdskv_length_ult(hg_handle_t handle)
     margo_instance_id mid = margo_hg_handle_get_instance(handle);
     assert(mid);
     const struct hg_info* info = margo_get_info(handle);
-    sdskv_provider_t svr_ctx = 
-        (sdskv_provider_t)margo_registered_data(mid, info->id);
+    sdskv_provider_t svr_ctx = (sdskv_provider_t)margo_registered_data(mid, info->id);
     if(!svr_ctx) {
         fprintf(stderr, "Error: SDSKV could not find provider\n"); 
         out.ret = SDSKV_ERR_UNKNOWN_PR;
@@ -847,7 +849,6 @@ static void sdskv_length_ult(hg_handle_t handle)
     ABT_rwlock_unlock(svr_ctx->lock);
     
     ds_bulk_t kdata(in.key.data, in.key.data+in.key.size);
-
     ds_bulk_t vdata;
     if(db->get(kdata, vdata)) {
         out.size = vdata.size();
@@ -871,6 +872,10 @@ static void sdskv_get_ult(hg_handle_t handle)
     hg_return_t hret;
     get_in_t in;
     get_out_t out;
+    out.value.data = nullptr;
+    out.value.size = 0;
+    out.vsize = 0;
+    out.ret = SDSKV_SUCCESS;
 
     margo_instance_id mid = margo_hg_handle_get_instance(handle);
     assert(mid);
@@ -888,9 +893,6 @@ static void sdskv_get_ult(hg_handle_t handle)
     hret = margo_get_input(handle, &in);
     if(hret != HG_SUCCESS) {
         out.ret = SDSKV_ERR_MERCURY;
-        out.value.data = nullptr;
-        out.value.size = 0;
-        out.vsize = 0;
         margo_respond(handle, &out);
         margo_destroy(handle);
         return;
@@ -901,9 +903,6 @@ static void sdskv_get_ult(hg_handle_t handle)
     if(it == svr_ctx->databases.end()) {
         ABT_rwlock_unlock(svr_ctx->lock);
         out.ret = SDSKV_ERR_UNKNOWN_DB;
-        out.value.data = nullptr;
-        out.value.size = 0;
-        out.vsize = 0;
         margo_respond(handle, &out);
         margo_free_input(handle, &in);
         margo_destroy(handle);
@@ -913,8 +912,8 @@ static void sdskv_get_ult(hg_handle_t handle)
     ABT_rwlock_unlock(svr_ctx->lock);
     
     ds_bulk_t kdata(in.key.data, in.key.data+in.key.size);
-
     ds_bulk_t vdata;
+
     if(db->get(kdata, vdata)) {
         if(vdata.size() <= in.vsize) {
             out.vsize = vdata.size();
@@ -923,14 +922,9 @@ static void sdskv_get_ult(hg_handle_t handle)
             out.ret = SDSKV_SUCCESS;
         } else {
             out.vsize = vdata.size();
-            out.value.size = 0;
-            out.value.data = nullptr;
             out.ret = SDSKV_ERR_SIZE;
         }
     } else {
-        out.vsize = 0;
-        out.value.size = 0;
-        out.value.data = nullptr;
         out.ret   = SDSKV_ERR_UNKNOWN_KEY;
     }
 
@@ -949,13 +943,13 @@ static void sdskv_get_multi_ult(hg_handle_t handle)
     get_multi_in_t in;
     get_multi_out_t out;
     out.ret = SDSKV_SUCCESS;
-    std::vector<char> local_keys_buffer;
-    std::vector<char> local_vals_buffer;
+    char* local_keys_buffer;
+    char* local_vals_buffer;
     hg_bulk_t local_keys_bulk_handle;
     hg_bulk_t local_vals_bulk_handle;
 
-    auto r1 = at_exit([&handle]() { margo_destroy(handle); });
-    auto r2 = at_exit([&handle,&out]() { margo_respond(handle, &out); });
+    auto _margo_destroy = at_exit([&handle]() { margo_destroy(handle); });
+    auto _margo_respond = at_exit([&handle,&out]() { margo_respond(handle, &out); });
 
     /* get margo instance and provider */
     margo_instance_id mid = margo_hg_handle_get_instance(handle);
@@ -973,7 +967,7 @@ static void sdskv_get_multi_ult(hg_handle_t handle)
         out.ret = SDSKV_ERR_MERCURY;
         return;
     }
-    auto r3 = at_exit([&handle,&in]() { margo_free_input(handle, &in); });
+    auto _free_input = at_exit([&handle,&in]() { margo_free_input(handle, &in); });
 
     /* find the target database */
     ABT_rwlock_rdlock(svr_ctx->lock);
@@ -987,9 +981,10 @@ static void sdskv_get_multi_ult(hg_handle_t handle)
     ABT_rwlock_unlock(svr_ctx->lock);
 
     /* allocate buffers to receive the keys */
-    local_keys_buffer.resize(in.keys_bulk_size);
+    local_keys_buffer = (char*)malloc(in.keys_bulk_size);
     std::vector<void*> keys_addr(1);
-    keys_addr[0] = (void*)local_keys_buffer.data();
+    keys_addr[0] = (void*)local_keys_buffer;
+    auto _free_keys_buffer = at_exit([local_keys_buffer]() { free(local_keys_buffer); });
     
     /* create bulk handle to receive key sizes and packed keys */
     hret = margo_bulk_create(mid, 1, keys_addr.data(), &in.keys_bulk_size,
@@ -998,12 +993,13 @@ static void sdskv_get_multi_ult(hg_handle_t handle)
         out.ret = SDSKV_ERR_MERCURY;
         return;
     }
-    auto r6 = at_exit([&local_keys_bulk_handle]() { margo_bulk_free(local_keys_bulk_handle); });
+    auto _free_keys_bulk = at_exit([&local_keys_bulk_handle]() { margo_bulk_free(local_keys_bulk_handle); });
 
     /* allocate buffer to send/receive the values */
-    local_vals_buffer.resize(in.vals_bulk_size);
+    local_vals_buffer = (char*)malloc(in.vals_bulk_size);
     std::vector<void*> vals_addr(1);
-    vals_addr[0] = (void*)local_vals_buffer.data();
+    vals_addr[0] = (void*)local_vals_buffer;
+    auto _free_vals_buffer = at_exit([local_vals_buffer]() { free(local_vals_buffer); });
 
     /* create bulk handle to receive max value sizes and to send values */
     hret = margo_bulk_create(mid, 1, vals_addr.data(), &in.vals_bulk_size,
@@ -1012,7 +1008,7 @@ static void sdskv_get_multi_ult(hg_handle_t handle)
         out.ret = SDSKV_ERR_MERCURY;
         return;
     }
-    auto r7 = at_exit([&local_vals_bulk_handle]() { margo_bulk_free(local_vals_bulk_handle); });
+    auto _free_vals_bulk = at_exit([&local_vals_bulk_handle]() { margo_bulk_free(local_vals_bulk_handle); });
 
     /* transfer keys */
     hret = margo_bulk_transfer(mid, HG_BULK_PULL, info->addr, in.keys_bulk_handle, 0,
@@ -1031,13 +1027,13 @@ static void sdskv_get_multi_ult(hg_handle_t handle)
     }
 
     /* interpret beginning of the key buffer as a list of key sizes */
-    hg_size_t* key_sizes = (hg_size_t*)local_keys_buffer.data();
+    hg_size_t* key_sizes = (hg_size_t*)local_keys_buffer;
     /* find beginning of packed keys */
-    char* packed_keys = local_keys_buffer.data() + in.num_keys*sizeof(hg_size_t);
+    char* packed_keys = local_keys_buffer + in.num_keys*sizeof(hg_size_t);
     /* interpret beginning of the value buffer as a list of value sizes */
-    hg_size_t* val_sizes = (hg_size_t*)local_vals_buffer.data();
+    hg_size_t* val_sizes = (hg_size_t*)local_vals_buffer;
     /* find beginning of region where to pack values */
-    char* packed_values = local_vals_buffer.data() + in.num_keys*sizeof(hg_size_t);
+    char* packed_values = local_vals_buffer + in.num_keys*sizeof(hg_size_t);
 
     /* go through the key/value pairs and get the values from the database */
     for(unsigned i=0; i < in.num_keys; i++) {
@@ -1078,13 +1074,13 @@ static void sdskv_length_multi_ult(hg_handle_t handle)
     length_multi_in_t in;
     length_multi_out_t out;
     out.ret = SDSKV_SUCCESS;
-    std::vector<char> local_keys_buffer;
-    std::vector<hg_size_t> local_vals_size_buffer;
+    char* local_keys_buffer;
+    hg_size_t* local_vals_size_buffer;
     hg_bulk_t local_keys_bulk_handle;
     hg_bulk_t local_vals_size_bulk_handle;
 
-    auto r1 = at_exit([&handle]() { margo_destroy(handle); });
-    auto r2 = at_exit([&handle,&out]() { margo_respond(handle, &out); });
+    auto _margo_destroy = at_exit([&handle]() { margo_destroy(handle); });
+    auto _margo_respond = at_exit([&handle,&out]() { margo_respond(handle, &out); });
 
     /* get margo instance and provider */
     margo_instance_id mid = margo_hg_handle_get_instance(handle);
@@ -1102,7 +1098,7 @@ static void sdskv_length_multi_ult(hg_handle_t handle)
         out.ret = SDSKV_ERR_MERCURY;
         return;
     }
-    auto r3 = at_exit([&handle,&in]() { margo_free_input(handle, &in); });
+    auto _free_input = at_exit([&handle,&in]() { margo_free_input(handle, &in); });
 
     /* find the target database */
     ABT_rwlock_rdlock(svr_ctx->lock);
@@ -1116,9 +1112,10 @@ static void sdskv_length_multi_ult(hg_handle_t handle)
     ABT_rwlock_unlock(svr_ctx->lock);
 
     /* allocate buffers to receive the keys */
-    local_keys_buffer.resize(in.keys_bulk_size);
+    local_keys_buffer = (char*)malloc(in.keys_bulk_size);
     std::vector<void*> keys_addr(1);
-    keys_addr[0] = (void*)local_keys_buffer.data();
+    keys_addr[0] = (void*)local_keys_buffer;
+    auto _free_keys_buffer = at_exit([local_keys_buffer]() { free(local_keys_buffer); });
     
     /* create bulk handle to receive key sizes and packed keys */
     hret = margo_bulk_create(mid, 1, keys_addr.data(), &in.keys_bulk_size,
@@ -1127,13 +1124,14 @@ static void sdskv_length_multi_ult(hg_handle_t handle)
         out.ret = SDSKV_ERR_MERCURY;
         return;
     }
-    auto r6 = at_exit([&local_keys_bulk_handle]() { margo_bulk_free(local_keys_bulk_handle); });
+    auto _free_keys_bulk = at_exit([&local_keys_bulk_handle]() { margo_bulk_free(local_keys_bulk_handle); });
 
     /* allocate buffer to send the values */
-    local_vals_size_buffer.resize(in.num_keys);
+    local_vals_size_buffer = (hg_size_t*)malloc(in.num_keys*sizeof(hg_size_t));
     std::vector<void*> vals_sizes_addr(1);
     hg_size_t local_vals_size_buffer_size = in.num_keys * sizeof(hg_size_t);
-    vals_sizes_addr[0] = (void*)local_vals_size_buffer.data();
+    vals_sizes_addr[0] = (void*)local_vals_size_buffer;
+    auto _free_valsizes_buffer = at_exit([local_vals_size_buffer]() { free(local_vals_size_buffer); });
 
     /* create bulk handle to send values sizes */
     hret = margo_bulk_create(mid, 1, vals_sizes_addr.data(), &local_vals_size_buffer_size,
@@ -1142,7 +1140,7 @@ static void sdskv_length_multi_ult(hg_handle_t handle)
         out.ret = SDSKV_ERR_MERCURY;
         return;
     }
-    auto r7 = at_exit([&local_vals_size_bulk_handle]() { margo_bulk_free(local_vals_size_bulk_handle); });
+    auto _free_valsizes_bulk = at_exit([&local_vals_size_bulk_handle]() { margo_bulk_free(local_vals_size_bulk_handle); });
 
     /* transfer keys */
     hret = margo_bulk_transfer(mid, HG_BULK_PULL, info->addr, in.keys_bulk_handle, 0,
@@ -1153,9 +1151,9 @@ static void sdskv_length_multi_ult(hg_handle_t handle)
     }
 
     /* interpret beginning of the key buffer as a list of key sizes */
-    hg_size_t* key_sizes = (hg_size_t*)local_keys_buffer.data();
+    hg_size_t* key_sizes = (hg_size_t*)local_keys_buffer;
     /* find beginning of packed keys */
-    char* packed_keys = local_keys_buffer.data() + in.num_keys*sizeof(hg_size_t);
+    char* packed_keys = local_keys_buffer + in.num_keys*sizeof(hg_size_t);
 
     /* go through the key/value pairs and get the values from the database */
     for(unsigned i=0; i < in.num_keys; i++) {
@@ -1436,11 +1434,11 @@ static void sdskv_erase_multi_ult(hg_handle_t handle)
     erase_multi_in_t in;
     erase_multi_out_t out;
     out.ret = SDSKV_SUCCESS;
-    std::vector<char> local_keys_buffer;
+    char* local_keys_buffer;
     hg_bulk_t local_keys_bulk_handle;
 
-    auto r1 = at_exit([&handle]() { margo_destroy(handle); });
-    auto r2 = at_exit([&handle,&out]() { margo_respond(handle, &out); });
+    auto _margo_destroy = at_exit([&handle]() { margo_destroy(handle); });
+    auto _margo_respond = at_exit([&handle,&out]() { margo_respond(handle, &out); });
 
     /* get margo instance and provider */
     margo_instance_id mid = margo_hg_handle_get_instance(handle);
@@ -1458,7 +1456,7 @@ static void sdskv_erase_multi_ult(hg_handle_t handle)
         out.ret = SDSKV_ERR_MERCURY;
         return;
     }
-    auto r3 = at_exit([&handle,&in]() { margo_free_input(handle, &in); });
+    auto _free_input = at_exit([&handle,&in]() { margo_free_input(handle, &in); });
 
     /* find the target database */
     ABT_rwlock_rdlock(svr_ctx->lock);
@@ -1472,9 +1470,9 @@ static void sdskv_erase_multi_ult(hg_handle_t handle)
     ABT_rwlock_unlock(svr_ctx->lock);
 
     /* allocate buffers to receive the keys */
-    local_keys_buffer.resize(in.keys_bulk_size);
+    local_keys_buffer = (char*)malloc(in.keys_bulk_size);
     std::vector<void*> keys_addr(1);
-    keys_addr[0] = (void*)local_keys_buffer.data();
+    keys_addr[0] = (void*)local_keys_buffer;
     
     /* create bulk handle to receive key sizes and packed keys */
     hret = margo_bulk_create(mid, 1, keys_addr.data(), &in.keys_bulk_size,
@@ -1483,7 +1481,7 @@ static void sdskv_erase_multi_ult(hg_handle_t handle)
         out.ret = SDSKV_ERR_MERCURY;
         return;
     }
-    auto r6 = at_exit([&local_keys_bulk_handle]() { margo_bulk_free(local_keys_bulk_handle); });
+    auto _bulk_free = at_exit([&local_keys_bulk_handle]() { margo_bulk_free(local_keys_bulk_handle); });
 
     /* transfer keys */
     hret = margo_bulk_transfer(mid, HG_BULK_PULL, info->addr, in.keys_bulk_handle, 0,
@@ -1494,9 +1492,9 @@ static void sdskv_erase_multi_ult(hg_handle_t handle)
     }
 
     /* interpret beginning of the key buffer as a list of key sizes */
-    hg_size_t* key_sizes = (hg_size_t*)local_keys_buffer.data();
+    hg_size_t* key_sizes = (hg_size_t*)local_keys_buffer;
     /* find beginning of packed keys */
-    char* packed_keys = local_keys_buffer.data() + in.num_keys*sizeof(hg_size_t);
+    char* packed_keys = local_keys_buffer + in.num_keys*sizeof(hg_size_t);
 
     /* go through the key/value pairs and erase them */
     for(unsigned i=0; i < in.num_keys; i++) {
@@ -1975,8 +1973,8 @@ static void sdskv_migrate_keys_ult(hg_handle_t handle)
     migrate_keys_out_t out;
     out.ret = SDSKV_SUCCESS;
 
-    auto r0 = at_exit([&handle]() { margo_destroy(handle); });
-    auto r1 = at_exit([&handle,&out]() { margo_respond(handle, &out); });
+    auto _margo_destroy = at_exit([&handle]() { margo_destroy(handle); });
+    auto _margo_respond = at_exit([&handle,&out]() { margo_respond(handle, &out); });
 
     /* get the provider handling this request */
     margo_instance_id mid = margo_hg_handle_get_instance(handle);
@@ -1994,7 +1992,7 @@ static void sdskv_migrate_keys_ult(hg_handle_t handle)
         out.ret = SDSKV_ERR_MERCURY;
         return;
     }
-    auto r2 = at_exit([&handle,&in]() { margo_free_input(handle, &in); });
+    auto _free_input = at_exit([&handle,&in]() { margo_free_input(handle, &in); });
     /* find the source database */
     ABT_rwlock_rdlock(provider->lock);
     auto it = provider->databases.find(in.source_db_id);
@@ -2015,7 +2013,7 @@ static void sdskv_migrate_keys_ult(hg_handle_t handle)
 
     /* create the bulk buffer to receive the keys */
     char *buffer = (char*)malloc(in.bulk_size);
-    auto r4 = at_exit([&buffer]() { free(buffer); });
+    auto _free_buffer = at_exit([&buffer]() { free(buffer); });
     hg_size_t bulk_size = in.bulk_size;
     hg_bulk_t bulk_handle = HG_BULK_NULL;
     hret = margo_bulk_create(mid, 1, (void**)&buffer, &bulk_size,
@@ -2024,7 +2022,7 @@ static void sdskv_migrate_keys_ult(hg_handle_t handle)
         out.ret = SDSKV_ERR_MERCURY;
         return;
     }
-    auto r5 = at_exit([&bulk_handle]() { margo_bulk_free(bulk_handle); });
+    auto _free_bulk_handle = at_exit([&bulk_handle]() { margo_bulk_free(bulk_handle); });
 
     /* issue a bulk pull */
     hret = margo_bulk_transfer(mid, HG_BULK_PULL, info->addr, in.keys_bulk, 0,
@@ -2045,7 +2043,7 @@ static void sdskv_migrate_keys_ult(hg_handle_t handle)
         out.ret = SDSKV_ERR_MERCURY;
         return;
     }
-    auto r6 = at_exit([&put_handle]() { margo_destroy(put_handle); });
+    auto _destroy_put_handle = at_exit([&put_handle]() { margo_destroy(put_handle); });
     /* iterate over the keys */
     size_t offset = 0;
     put_in_t put_in;
@@ -2138,9 +2136,9 @@ static void sdskv_migrate_keys_prefixed_ult(hg_handle_t handle)
     migrate_keys_out_t out;
 
     /* need to destroy the handle at exit */
-    auto r0 = at_exit([&handle]() { margo_destroy(handle); });
+    auto _margo_destroy = at_exit([&handle]() { margo_destroy(handle); });
     /* need to respond at exit */
-    auto r1 = at_exit([&handle,&out]() { margo_respond(handle, &out); });
+    auto _margo_respond = at_exit([&handle,&out]() { margo_respond(handle, &out); });
 
     /* get the provider handling this request */
     margo_instance_id mid = margo_hg_handle_get_instance(handle);
@@ -2159,7 +2157,7 @@ static void sdskv_migrate_keys_prefixed_ult(hg_handle_t handle)
         return;
     }
     /* need to destroy the input at exit */
-    auto r2 = at_exit([&handle,&in]() { margo_free_input(handle, &in); });
+    auto _margo_free_input = at_exit([&handle,&in]() { margo_free_input(handle, &in); });
     /* find the source database */
     ABT_rwlock_rdlock(provider->lock);
     auto it = provider->databases.find(in.source_db_id);
@@ -2178,7 +2176,7 @@ static void sdskv_migrate_keys_prefixed_ult(hg_handle_t handle)
         return;
     }
     /* need to destroy the address at exit */
-    auto r3 = at_exit([&mid,&target_addr]() { margo_addr_free(mid, target_addr); });
+    auto _margo_addr_free = at_exit([&mid,&target_addr]() { margo_addr_free(mid, target_addr); });
     /* create a handle for a "put" RPC */
     hg_handle_t put_handle;
     hret = margo_create(mid, target_addr, provider->sdskv_put_id, &put_handle);
@@ -2187,7 +2185,7 @@ static void sdskv_migrate_keys_prefixed_ult(hg_handle_t handle)
         return;
     }
     /* need to destroy the handle at exist */
-    auto r4 = at_exit([&put_handle]() { margo_destroy(put_handle); });
+    auto _destroy_put_handle = at_exit([&put_handle]() { margo_destroy(put_handle); });
     /* iterate over the keys by packets of 64 */
     /* XXX make this number configurable */
     std::vector<std::pair<ds_bulk_t,ds_bulk_t>> batch;
@@ -2247,9 +2245,9 @@ static void sdskv_migrate_all_keys_ult(hg_handle_t handle)
     out.ret = SDSKV_SUCCESS;
 
     /* need to destroy the handle at exit */
-    auto r0 = at_exit([&handle]() { margo_destroy(handle); });
+    auto _margo_destroy = at_exit([&handle]() { margo_destroy(handle); });
     /* need to respond at exit */
-    auto r1 = at_exit([&handle,&out]() { margo_respond(handle, &out); });
+    auto _margo_respond = at_exit([&handle,&out]() { margo_respond(handle, &out); });
 
     /* get the provider handling this request */
     margo_instance_id mid = margo_hg_handle_get_instance(handle);
@@ -2268,7 +2266,7 @@ static void sdskv_migrate_all_keys_ult(hg_handle_t handle)
         return;
     }
     /* need to destroy the input at exit */
-    auto r2 = at_exit([&handle,&in]() { margo_free_input(handle, &in); });
+    auto _margo_free_input = at_exit([&handle,&in]() { margo_free_input(handle, &in); });
     /* find the source database */
     ABT_rwlock_rdlock(provider->lock);
     auto it = provider->databases.find(in.source_db_id);
@@ -2287,7 +2285,7 @@ static void sdskv_migrate_all_keys_ult(hg_handle_t handle)
         return;
     }
     /* need to destroy the address at exit */
-    auto r3 = at_exit([&mid,&target_addr]() { margo_addr_free(mid, target_addr); });
+    auto _margo_addr_free = at_exit([&mid,&target_addr]() { margo_addr_free(mid, target_addr); });
     /* create a handle for a "put" RPC */
     hg_handle_t put_handle;
     hret = margo_create(mid, target_addr, provider->sdskv_put_id, &put_handle);
@@ -2296,7 +2294,7 @@ static void sdskv_migrate_all_keys_ult(hg_handle_t handle)
         return;
     }
     /* need to destroy the handle at exist */
-    auto r4 = at_exit([&put_handle]() { margo_destroy(put_handle); });
+    auto _destroy_put_handle = at_exit([&put_handle]() { margo_destroy(put_handle); });
     /* iterate over the keys by packets of 64 */
     /* XXX make this number configurable */
     std::vector<std::pair<ds_bulk_t,ds_bulk_t>> batch;
