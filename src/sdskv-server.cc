@@ -849,9 +849,9 @@ static void sdskv_length_ult(hg_handle_t handle)
     ABT_rwlock_unlock(svr_ctx->lock);
     
     data_slice kdata(in.key.data, in.key.data+in.key.size);
-    data_slice vdata;
-    if(db->get(kdata, vdata)) {
-        out.size = vdata.size();
+    size_t l;
+    if(db->length(kdata, l)) {
+        out.size = l;
         out.ret  = SDSKV_SUCCESS;
     } else {
         out.size = 0;

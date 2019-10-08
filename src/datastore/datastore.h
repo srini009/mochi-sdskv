@@ -40,6 +40,14 @@ class AbstractDataStore {
         }
         virtual bool get(const data_slice &key, data_slice &data)=0;
         virtual bool get(const data_slice &key, std::vector<data_slice> &data)=0;
+        virtual bool length(const data_slice &key, size_t& result) {
+            data_slice value;
+            if(get(key, value)) {
+                result = value.size();
+                return true;
+            }
+            return false;
+        }
         virtual bool exists(const void* key, hg_size_t ksize) const = 0;
         virtual bool exists(const data_slice &key) const {
             return exists(key.data(), key.size());
