@@ -25,9 +25,6 @@ class AbstractDataStore {
         virtual int put(const ds_bulk_t &key, const ds_bulk_t &data) {
             return put(key.data(), key.size(), data.data(), data.size());
         }
-        virtual int put(ds_bulk_t&& key, ds_bulk_t&& data) {
-            return put(key.data(), key.size(), data.data(), data.size());
-        }
         virtual int put_multi(hg_size_t num_items,
                               const void* const* keys,
                               const hg_size_t* ksizes,

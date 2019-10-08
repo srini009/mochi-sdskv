@@ -65,23 +65,11 @@ class MapDataStore : public AbstractDataStore {
             return SDSKV_SUCCESS;
         }
 
-        virtual int put(ds_bulk_t &&key, ds_bulk_t &&data) override {
-            ABT_rwlock_wrlock(_map_lock);
-            auto x = _map.count(key);
-            if(_no_overwrite && (x != 0)) {
-                ABT_rwlock_unlock(_map_lock);
-                return SDSKV_ERR_KEYEXISTS;
-            }
-            _map.insert(std::make_pair(std::move(key),std::move(data)));
-            ABT_rwlock_unlock(_map_lock);
-            return SDSKV_SUCCESS;
-        }
-
         virtual int put(const void* key, hg_size_t ksize, const void* value, hg_size_t vsize) override {
             if(vsize != 0) {
                 ds_bulk_t k((const char*)key, ((const char*)key)+ksize);
                 ds_bulk_t v((const char*)value, ((const char*)value)+vsize);
-                return put(std::move(k), std::move(v));
+                return put(k, v);
             } else {
                 ds_bulk_t k((const char*)key, ((const char*)key)+ksize);
                 ds_bulk_t v;
