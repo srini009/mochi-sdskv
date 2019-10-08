@@ -20,7 +20,7 @@ LevelDBDataStore::LevelDBDataStore(bool eraseOnGet, bool debug) :
   _dbm = NULL;
 };
   
-std::string LevelDBDataStore::toString(const ds_bulk_t &bulk_val) {
+std::string LevelDBDataStore::toString(const data_slice &bulk_val) {
   std::string str_val(bulk_val.begin(), bulk_val.end());
   return str_val;
 };
@@ -30,8 +30,8 @@ std::string LevelDBDataStore::toString(const char* buf, hg_size_t buf_size) {
   return str_val;
 };
 
-ds_bulk_t LevelDBDataStore::fromString(const std::string &str_val) {
-  ds_bulk_t bulk_val(str_val.begin(), str_val.end());
+data_slice LevelDBDataStore::fromString(const std::string &str_val) {
+  data_slice bulk_val(str_val.begin(), str_val.end());
   return bulk_val;
 };
 
@@ -89,7 +89,7 @@ int LevelDBDataStore::put(const void* key, hg_size_t ksize, const void* value, h
   return SDSKV_ERR_PUT;
 };
 
-bool LevelDBDataStore::erase(const ds_bulk_t &key) {
+bool LevelDBDataStore::erase(const data_slice &key) {
     leveldb::Status status;
     status = _dbm->Delete(leveldb::WriteOptions(), toString(key));
     return status.ok();
@@ -102,7 +102,7 @@ bool LevelDBDataStore::exists(const void* key, hg_size_t ksize) const {
     return status.ok();
 }
 
-bool LevelDBDataStore::get(const ds_bulk_t &key, ds_bulk_t &data) {
+bool LevelDBDataStore::get(const data_slice &key, data_slice &data) {
   leveldb::Status status;
   bool success = false;
 
@@ -123,11 +123,11 @@ bool LevelDBDataStore::get(const ds_bulk_t &key, ds_bulk_t &data) {
   return success;
 };
 
-bool LevelDBDataStore::get(const ds_bulk_t &key, std::vector<ds_bulk_t> &data) {
+bool LevelDBDataStore::get(const data_slice &key, std::vector<data_slice> &data) {
   bool success = false;
 
   data.clear();
-  ds_bulk_t value;
+  data_slice value;
   if (get(key, value)) {
     data.push_back(value);
     success = true;
@@ -139,10 +139,10 @@ bool LevelDBDataStore::get(const ds_bulk_t &key, std::vector<ds_bulk_t> &data) {
 void LevelDBDataStore::set_in_memory(bool enable)
 {};
 
-std::vector<ds_bulk_t> LevelDBDataStore::vlist_keys(
-        const ds_bulk_t &start, hg_size_t count, const ds_bulk_t &prefix) const
+std::vector<data_slice> LevelDBDataStore::vlist_keys(
+        const data_slice &start, hg_size_t count, const data_slice &prefix) const
 {
-    std::vector<ds_bulk_t> keys;
+    std::vector<data_slice> keys;
 
     leveldb::Iterator *it = _dbm->NewIterator(leveldb::ReadOptions());
     leveldb::Slice start_slice(start.data(), start.size());
@@ -162,7 +162,7 @@ std::vector<ds_bulk_t> LevelDBDataStore::vlist_keys(
     }
     /* note: iterator initialized above, not in for loop */
     for (; it->Valid() && keys.size() < count; it->Next() ) {
-        ds_bulk_t k(it->key().size());
+        data_slice k(it->key().size());
         memcpy(k.data(), it->key().data(), it->key().size() );
         c = std::memcmp(prefix.data(), k.data(), prefix.size());
         if(c == 0) {
@@ -175,10 +175,10 @@ std::vector<ds_bulk_t> LevelDBDataStore::vlist_keys(
     return keys;
 }
 
-std::vector<std::pair<ds_bulk_t,ds_bulk_t>> LevelDBDataStore::vlist_keyvals(
-        const ds_bulk_t &start, hg_size_t count, const ds_bulk_t &prefix) const
+std::vector<std::pair<data_slice,data_slice>> LevelDBDataStore::vlist_keyvals(
+        const data_slice &start, hg_size_t count, const data_slice &prefix) const
 {
-    std::vector<std::pair<ds_bulk_t,ds_bulk_t>> result;
+    std::vector<std::pair<data_slice,data_slice>> result;
 
     leveldb::Iterator *it = _dbm->NewIterator(leveldb::ReadOptions());
     leveldb::Slice start_slice(start.data(), start.size());
@@ -198,8 +198,8 @@ std::vector<std::pair<ds_bulk_t,ds_bulk_t>> LevelDBDataStore::vlist_keyvals(
     }
     /* note: iterator initialized above, not in for loop */
     for (; it->Valid() && result.size() < count; it->Next() ) {
-        ds_bulk_t k(it->key().size());
-        ds_bulk_t v(it->value().size());
+        data_slice k(it->key().size());
+        data_slice v(it->value().size());
         memcpy(k.data(), it->key().data(), it->key().size());
         memcpy(v.data(), it->value().data(), it->value().size());
 
@@ -214,17 +214,17 @@ std::vector<std::pair<ds_bulk_t,ds_bulk_t>> LevelDBDataStore::vlist_keyvals(
     return result;
 }
 
-std::vector<ds_bulk_t> LevelDBDataStore::vlist_key_range(
-        const ds_bulk_t &lower_bound, const ds_bulk_t &upper_bound, hg_size_t max_keys) const {
-    std::vector<ds_bulk_t> result;
+std::vector<data_slice> LevelDBDataStore::vlist_key_range(
+        const data_slice &lower_bound, const data_slice &upper_bound, hg_size_t max_keys) const {
+    std::vector<data_slice> result;
     // TODO implement this function
     throw SDSKV_OP_NOT_IMPL;
     return result;
 }
 
-std::vector<std::pair<ds_bulk_t,ds_bulk_t>> LevelDBDataStore::vlist_keyval_range(
-        const ds_bulk_t &lower_bound, const ds_bulk_t &upper_bound, hg_size_t max_keys) const {
-    std::vector<std::pair<ds_bulk_t,ds_bulk_t>> result;
+std::vector<std::pair<data_slice,data_slice>> LevelDBDataStore::vlist_keyval_range(
+        const data_slice &lower_bound, const data_slice &upper_bound, hg_size_t max_keys) const {
+    std::vector<std::pair<data_slice,data_slice>> result;
     // TODO implement this function
     throw SDSKV_OP_NOT_IMPL;
     return result;

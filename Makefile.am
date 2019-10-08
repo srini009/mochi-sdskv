@@ -95,7 +95,7 @@ include_HEADERS = include/sdskv-client.h \
 		  include/sdskv-server.hpp \
 		  include/sdskv-common.hpp
 
-noinst_HEADERS = src/bulk.h \
+noinst_HEADERS = src/data_slice.h \
 		 src/sdskv-rpc-types.h \
 		 src/datastore/datastore.h \
 		 src/datastore/map_datastore.h \

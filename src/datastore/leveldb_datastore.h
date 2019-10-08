@@ -43,10 +43,10 @@ class LevelDBDataStore : public AbstractDataStore {
         virtual ~LevelDBDataStore();
         virtual bool openDatabase(const std::string& db_name, const std::string& path) override;
         virtual int put(const void* key, hg_size_t ksize, const void* kdata, hg_size_t dsize) override;
-        virtual bool get(const ds_bulk_t &key, ds_bulk_t &data) override;
-        virtual bool get(const ds_bulk_t &key, std::vector<ds_bulk_t> &data) override;
+        virtual bool get(const data_slice &key, data_slice &data) override;
+        virtual bool get(const data_slice &key, std::vector<data_slice> &data) override;
         virtual bool exists(const void* key, hg_size_t ksize) const override;
-        virtual bool erase(const ds_bulk_t &key) override;
+        virtual bool erase(const data_slice &key) override;
         virtual void set_in_memory(bool enable) override; // not supported, a no-op
         virtual void set_comparison_function(const std::string& name, comparator_fn less) override;
         virtual void set_no_overwrite() override {
@@ -57,19 +57,19 @@ class LevelDBDataStore : public AbstractDataStore {
         virtual remi_fileset_t create_and_populate_fileset() const override;
 #endif
     protected:
-        virtual std::vector<ds_bulk_t> vlist_keys(
-                const ds_bulk_t &start, hg_size_t count, const ds_bulk_t &prefix) const override;
-        virtual std::vector<std::pair<ds_bulk_t,ds_bulk_t>> vlist_keyvals(
-                const ds_bulk_t &start_key, hg_size_t count, const ds_bulk_t &prefix) const override;
-        virtual std::vector<ds_bulk_t> vlist_key_range(
-                const ds_bulk_t &lower_bound, const ds_bulk_t &upper_bound, hg_size_t max_keys) const override;
-        virtual std::vector<std::pair<ds_bulk_t,ds_bulk_t>> vlist_keyval_range(
-                const ds_bulk_t &lower_bound, const ds_bulk_t& upper_bound, hg_size_t max_keys) const override;
+        virtual std::vector<data_slice> vlist_keys(
+                const data_slice &start, hg_size_t count, const data_slice &prefix) const override;
+        virtual std::vector<std::pair<data_slice,data_slice>> vlist_keyvals(
+                const data_slice &start_key, hg_size_t count, const data_slice &prefix) const override;
+        virtual std::vector<data_slice> vlist_key_range(
+                const data_slice &lower_bound, const data_slice &upper_bound, hg_size_t max_keys) const override;
+        virtual std::vector<std::pair<data_slice,data_slice>> vlist_keyval_range(
+                const data_slice &lower_bound, const data_slice& upper_bound, hg_size_t max_keys) const override;
         leveldb::DB *_dbm = NULL;
     private:
-        static std::string toString(const ds_bulk_t &key);
+        static std::string toString(const data_slice &key);
         static std::string toString(const char* bug, hg_size_t buf_size);
-        static ds_bulk_t fromString(const std::string &keystr);
+        static data_slice fromString(const std::string &keystr);
         AbstractDataStore::comparator_fn _less;
         LevelDBDataStoreComparator _keycmp;
 };

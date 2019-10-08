@@ -206,7 +206,7 @@ bool BerkeleyDBDataStore::exists(const void* key, hg_size_t size) const {
     return status != DB_NOTFOUND;
 }
 
-bool BerkeleyDBDataStore::erase(const ds_bulk_t &key) {
+bool BerkeleyDBDataStore::erase(const data_slice &key) {
     Dbt db_key((void*)key.data(), key.size());
     int status = _dbm->del(NULL, &db_key, 0);
     return status == 0;
@@ -218,7 +218,7 @@ void BerkeleyDBDataStore::sync() {
 
 // In the case where Duplicates::ALLOW, this will return the first
 // value found using key.
-bool BerkeleyDBDataStore::get(const ds_bulk_t &key, ds_bulk_t &data) {
+bool BerkeleyDBDataStore::get(const data_slice &key, data_slice &data) {
   int status = 0;
   bool success = false;
 
@@ -256,11 +256,11 @@ bool BerkeleyDBDataStore::get(const ds_bulk_t &key, ds_bulk_t &data) {
 
 // TODO: To return more than 1 value (when Duplicates::ALLOW), this code should
 // use the c_get interface.
-bool BerkeleyDBDataStore::get(const ds_bulk_t &key, std::vector<ds_bulk_t> &data) {
+bool BerkeleyDBDataStore::get(const data_slice &key, std::vector<data_slice> &data) {
   bool success = false;
 
   data.clear();
-  ds_bulk_t value;
+  data_slice value;
   if (get(key, value)) {
     data.push_back(value);
     success = true;
@@ -273,10 +273,10 @@ void BerkeleyDBDataStore::set_in_memory(bool enable) {
   _in_memory = enable;
 };
 
-std::vector<ds_bulk_t> BerkeleyDBDataStore::vlist_keys(
-        const ds_bulk_t &start, hg_size_t count, const ds_bulk_t &prefix) const
+std::vector<data_slice> BerkeleyDBDataStore::vlist_keys(
+        const data_slice &start, hg_size_t count, const data_slice &prefix) const
 {
-    std::vector<ds_bulk_t> keys;
+    std::vector<data_slice> keys;
     Dbc * cursorp;
     Dbt key, data;
     int ret;
@@ -299,7 +299,7 @@ std::vector<ds_bulk_t> BerkeleyDBDataStore::vlist_keys(
         }
     }
 
-	ds_bulk_t k((char*)key.get_data(), ((char*)key.get_data())+key.get_size());
+	data_slice k((char*)key.get_data(), ((char*)key.get_data())+key.get_size());
 	/* SET_RANGE will return the smallest key greater than or equal to the
 	 * requested key, but we want strictly greater than */
     int c = 0;
@@ -313,7 +313,7 @@ std::vector<ds_bulk_t> BerkeleyDBDataStore::vlist_keys(
 	    ret = cursorp->get(&key, &data, DB_NEXT);
 	    if (ret !=0 ) break;
         
-        ds_bulk_t k((char*)key.get_data(), ((char*)key.get_data())+key.get_size());
+        data_slice k((char*)key.get_data(), ((char*)key.get_data())+key.get_size());
         c = std::memcmp(prefix.data(), k.data(), prefix.size());
         if(c == 0) {
             keys.push_back(std::move(k));
@@ -323,10 +323,10 @@ std::vector<ds_bulk_t> BerkeleyDBDataStore::vlist_keys(
     return keys;
 }
 
-std::vector<std::pair<ds_bulk_t,ds_bulk_t>> BerkeleyDBDataStore::vlist_keyvals(
-        const ds_bulk_t &start, hg_size_t count, const ds_bulk_t &prefix) const
+std::vector<std::pair<data_slice,data_slice>> BerkeleyDBDataStore::vlist_keyvals(
+        const data_slice &start, hg_size_t count, const data_slice &prefix) const
 {
-    std::vector<std::pair<ds_bulk_t,ds_bulk_t>> result;
+    std::vector<std::pair<data_slice,data_slice>> result;
     Dbc * cursorp;
     Dbt key, data;
     int ret;
@@ -349,8 +349,8 @@ std::vector<std::pair<ds_bulk_t,ds_bulk_t>> BerkeleyDBDataStore::vlist_keyvals(
         }
     }
 
-	ds_bulk_t k((char*)key.get_data(), ((char*)key.get_data())+key.get_size());
-    ds_bulk_t v((char*)data.get_data(), ((char*)data.get_data())+data.get_size());
+	data_slice k((char*)key.get_data(), ((char*)key.get_data())+key.get_size());
+    data_slice v((char*)data.get_data(), ((char*)data.get_data())+data.get_size());
 
 	/* SET_RANGE will return the smallest key greater than or equal to the
 	 * requested key, but we want strictly greater than */
@@ -365,8 +365,8 @@ std::vector<std::pair<ds_bulk_t,ds_bulk_t>> BerkeleyDBDataStore::vlist_keyvals(
 	    ret = cursorp->get(&key, &data, DB_NEXT);
 	    if (ret !=0 ) break;
         
-        ds_bulk_t k((char*)key.get_data(), ((char*)key.get_data())+key.get_size());
-        ds_bulk_t v((char*)data.get_data(), ((char*)data.get_data())+data.get_size());
+        data_slice k((char*)key.get_data(), ((char*)key.get_data())+key.get_size());
+        data_slice v((char*)data.get_data(), ((char*)data.get_data())+data.get_size());
 
         c = std::memcmp(prefix.data(), k.data(), prefix.size());
         if(c == 0) {
@@ -377,17 +377,17 @@ std::vector<std::pair<ds_bulk_t,ds_bulk_t>> BerkeleyDBDataStore::vlist_keyvals(
     return result;
 }
 
-std::vector<ds_bulk_t> BerkeleyDBDataStore::vlist_key_range(
-        const ds_bulk_t &lower_bound, const ds_bulk_t &upper_bound, hg_size_t max_keys) const {
-    std::vector<ds_bulk_t> result;
+std::vector<data_slice> BerkeleyDBDataStore::vlist_key_range(
+        const data_slice &lower_bound, const data_slice &upper_bound, hg_size_t max_keys) const {
+    std::vector<data_slice> result;
     // TODO implement this function
     throw SDSKV_OP_NOT_IMPL;
     return result;
 }
 
-std::vector<std::pair<ds_bulk_t,ds_bulk_t>> BerkeleyDBDataStore::vlist_keyval_range(
-        const ds_bulk_t &lower_bound, const ds_bulk_t &upper_bound, hg_size_t max_keys) const {
-    std::vector<std::pair<ds_bulk_t,ds_bulk_t>> result;
+std::vector<std::pair<data_slice,data_slice>> BerkeleyDBDataStore::vlist_keyval_range(
+        const data_slice &lower_bound, const data_slice &upper_bound, hg_size_t max_keys) const {
+    std::vector<std::pair<data_slice,data_slice>> result;
     // TODO implement this function
     throw SDSKV_OP_NOT_IMPL;
     return result;
