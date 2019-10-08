@@ -692,8 +692,8 @@ static void sdskv_put_ult(hg_handle_t handle)
     auto db = it->second;
     ABT_rwlock_unlock(svr_ctx->lock);
 
-    ds_bulk_t kdata(in.key.data, in.key.data+in.key.size);
-    ds_bulk_t vdata(in.value.data, in.value.data+in.value.size);
+    data_slice kdata(in.key.data, in.key.data+in.key.size);
+    data_slice vdata(in.value.data, in.value.data+in.value.size);
 
     out.ret = db->put(kdata, vdata);
 
@@ -848,8 +848,8 @@ static void sdskv_length_ult(hg_handle_t handle)
     auto db = it->second;
     ABT_rwlock_unlock(svr_ctx->lock);
     
-    ds_bulk_t kdata(in.key.data, in.key.data+in.key.size);
-    ds_bulk_t vdata;
+    data_slice kdata(in.key.data, in.key.data+in.key.size);
+    data_slice vdata;
     if(db->get(kdata, vdata)) {
         out.size = vdata.size();
         out.ret  = SDSKV_SUCCESS;
@@ -911,8 +911,8 @@ static void sdskv_get_ult(hg_handle_t handle)
     auto db = it->second;
     ABT_rwlock_unlock(svr_ctx->lock);
     
-    ds_bulk_t kdata(in.key.data, in.key.data+in.key.size);
-    ds_bulk_t vdata;
+    data_slice kdata(in.key.data, in.key.data+in.key.size);
+    data_slice vdata;
 
     if(db->get(kdata, vdata)) {
         if(vdata.size() <= in.vsize) {
@@ -1037,8 +1037,8 @@ static void sdskv_get_multi_ult(hg_handle_t handle)
 
     /* go through the key/value pairs and get the values from the database */
     for(unsigned i=0; i < in.num_keys; i++) {
-        ds_bulk_t kdata(packed_keys, packed_keys+key_sizes[i]);
-        ds_bulk_t vdata;
+        data_slice kdata(packed_keys, packed_keys+key_sizes[i]);
+        data_slice vdata;
         size_t client_allocated_value_size = val_sizes[i];
         if(db->get(kdata, vdata)) {
             size_t old_vsize = val_sizes[i];
@@ -1157,8 +1157,8 @@ static void sdskv_length_multi_ult(hg_handle_t handle)
 
     /* go through the key/value pairs and get the values from the database */
     for(unsigned i=0; i < in.num_keys; i++) {
-        ds_bulk_t kdata(packed_keys, packed_keys+key_sizes[i]);
-        ds_bulk_t vdata;
+        data_slice kdata(packed_keys, packed_keys+key_sizes[i]);
+        data_slice vdata;
         if(db->get(kdata, vdata)) {
             local_vals_size_buffer[i] = vdata.size();
         } else {
@@ -1222,7 +1222,7 @@ static void sdskv_bulk_put_ult(hg_handle_t handle)
     auto db = it->second;
     ABT_rwlock_unlock(svr_ctx->lock);
 
-    ds_bulk_t vdata(in.vsize);
+    data_slice vdata(in.vsize);
 
     if(in.vsize > 0) {
 
@@ -1253,7 +1253,7 @@ static void sdskv_bulk_put_ult(hg_handle_t handle)
 
     }
 
-    ds_bulk_t kdata(in.key.data, in.key.data+in.key.size);
+    data_slice kdata(in.key.data, in.key.data+in.key.size);
 
     out.ret = db->put(kdata, vdata);
 
@@ -1307,9 +1307,9 @@ static void sdskv_bulk_get_ult(hg_handle_t handle)
     auto db = it->second;
     ABT_rwlock_unlock(svr_ctx->lock);
     
-    ds_bulk_t kdata(in.key.data, in.key.data+in.key.size);
+    data_slice kdata(in.key.data, in.key.data+in.key.size);
 
-    ds_bulk_t vdata;
+    data_slice vdata;
     auto b = db->get(kdata, vdata);
 
     if(!b) {
@@ -1411,7 +1411,7 @@ static void sdskv_erase_ult(hg_handle_t handle)
     auto db = it->second;
     ABT_rwlock_unlock(svr_ctx->lock);
     
-    ds_bulk_t kdata(in.key.data, in.key.data+in.key.size);
+    data_slice kdata(in.key.data, in.key.data+in.key.size);
 
     if(db->erase(kdata)) {
         out.ret   = SDSKV_SUCCESS;
@@ -1498,7 +1498,7 @@ static void sdskv_erase_multi_ult(hg_handle_t handle)
 
     /* go through the key/value pairs and erase them */
     for(unsigned i=0; i < in.num_keys; i++) {
-        ds_bulk_t kdata(packed_keys, packed_keys+key_sizes[i]);
+        data_slice kdata(packed_keys, packed_keys+key_sizes[i]);
         db->erase(kdata);
         packed_keys += key_sizes[i];
     }
@@ -1548,7 +1548,7 @@ static void sdskv_exists_ult(hg_handle_t handle)
     auto db = it->second;
     ABT_rwlock_unlock(svr_ctx->lock);
     
-    ds_bulk_t kdata(in.key.data, in.key.data+in.key.size);
+    data_slice kdata(in.key.data, in.key.data+in.key.size);
 
     out.flag = db->exists(kdata) ? 1 : 0;
     out.ret  = SDSKV_SUCCESS;
@@ -1636,8 +1636,8 @@ static void sdskv_list_keys_ult(hg_handle_t handle)
         std::vector<hg_size_t> remote_ksizes(ksizes.begin(), ksizes.end());
 
         /* get the keys from the underlying database */    
-        ds_bulk_t start_kdata(in.start_key.data, in.start_key.data+in.start_key.size);
-        ds_bulk_t prefix(in.prefix.data, in.prefix.data+in.prefix.size);
+        data_slice start_kdata(in.start_key.data, in.start_key.data+in.start_key.size);
+        data_slice prefix(in.prefix.data, in.prefix.data+in.prefix.size);
         auto keys = db->list_keys(start_kdata, in.max_keys, prefix);
         hg_size_t num_keys = std::min((size_t)keys.size(), (size_t)in.max_keys);
 
@@ -1821,8 +1821,8 @@ static void sdskv_list_keyvals_ult(hg_handle_t handle)
         std::vector<hg_size_t> remote_vsizes(vsizes.begin(), vsizes.end());
 
         /* get the keys and values from the underlying database */    
-        ds_bulk_t start_kdata(in.start_key.data, in.start_key.data+in.start_key.size);
-        ds_bulk_t prefix(in.prefix.data, in.prefix.data+in.prefix.size);
+        data_slice start_kdata(in.start_key.data, in.start_key.data+in.start_key.size);
+        data_slice prefix(in.prefix.data, in.prefix.data+in.prefix.size);
         auto keyvals = db->list_keyvals(start_kdata, in.max_keys, prefix);
         hg_size_t num_keys = std::min((size_t)keyvals.size(), (size_t)in.max_keys);
 
@@ -2054,8 +2054,8 @@ static void sdskv_migrate_keys_ult(hg_handle_t handle)
         size_t size = seg_sizes[i]; 
         offset += size;
 
-        ds_bulk_t kdata(key, key+size);
-        ds_bulk_t vdata;
+        data_slice kdata(key, key+size);
+        data_slice vdata;
         auto b = database->get(kdata, vdata);
         if(!b) continue;
 
@@ -2188,9 +2188,9 @@ static void sdskv_migrate_keys_prefixed_ult(hg_handle_t handle)
     auto _destroy_put_handle = at_exit([&put_handle]() { margo_destroy(put_handle); });
     /* iterate over the keys by packets of 64 */
     /* XXX make this number configurable */
-    std::vector<std::pair<ds_bulk_t,ds_bulk_t>> batch;
-    ds_bulk_t start_key;
-    ds_bulk_t prefix(in.key_prefix.data, in.key_prefix.data + in.key_prefix.size);
+    std::vector<std::pair<data_slice,data_slice>> batch;
+    data_slice start_key;
+    data_slice prefix(in.key_prefix.data, in.key_prefix.data + in.key_prefix.size);
     do {
         try {
             batch = database->list_keyvals(start_key, 64, prefix);
@@ -2297,8 +2297,8 @@ static void sdskv_migrate_all_keys_ult(hg_handle_t handle)
     auto _destroy_put_handle = at_exit([&put_handle]() { margo_destroy(put_handle); });
     /* iterate over the keys by packets of 64 */
     /* XXX make this number configurable */
-    std::vector<std::pair<ds_bulk_t,ds_bulk_t>> batch;
-    ds_bulk_t start_key;
+    std::vector<std::pair<data_slice,data_slice>> batch;
+    data_slice start_key;
     do {
         try {
             batch = database->list_keyvals(start_key, 64);

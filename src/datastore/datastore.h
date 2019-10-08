@@ -4,7 +4,7 @@
 #define datastore_h
 
 #include "kv-config.h"
-#include "bulk.h"
+#include "data_slice.h"
 #include <margo.h>
 #ifdef USE_REMI
 #include "remi/remi-common.h"
@@ -22,7 +22,7 @@ class AbstractDataStore {
         virtual ~AbstractDataStore();
         virtual bool openDatabase(const std::string& db_name, const std::string& path)=0;
         virtual int put(const void* kdata, hg_size_t ksize, const void* vdata, hg_size_t vsize)=0;
-        virtual int put(const ds_bulk_t &key, const ds_bulk_t &data) {
+        virtual int put(const data_slice &key, const data_slice &data) {
             return put(key.data(), key.size(), data.data(), data.size());
         }
         virtual int put_multi(hg_size_t num_items,
@@ -38,13 +38,13 @@ class AbstractDataStore {
             }
             return ret;
         }
-        virtual bool get(const ds_bulk_t &key, ds_bulk_t &data)=0;
-        virtual bool get(const ds_bulk_t &key, std::vector<ds_bulk_t> &data)=0;
+        virtual bool get(const data_slice &key, data_slice &data)=0;
+        virtual bool get(const data_slice &key, std::vector<data_slice> &data)=0;
         virtual bool exists(const void* key, hg_size_t ksize) const = 0;
-        virtual bool exists(const ds_bulk_t &key) const {
+        virtual bool exists(const data_slice &key) const {
             return exists(key.data(), key.size());
         }
-        virtual bool erase(const ds_bulk_t &key) = 0;
+        virtual bool erase(const data_slice &key) = 0;
         virtual void set_in_memory(bool enable)=0; // enable/disable in-memory mode (where supported)
         virtual void set_comparison_function(const std::string& name, comparator_fn less)=0;
         virtual void set_no_overwrite()=0;
@@ -66,23 +66,23 @@ class AbstractDataStore {
             return _comp_fun_name;
         }
 
-        std::vector<ds_bulk_t> list_keys(
-                const ds_bulk_t &start_key, hg_size_t count, const ds_bulk_t& prefix=ds_bulk_t()) const {
+        std::vector<data_slice> list_keys(
+                const data_slice &start_key, hg_size_t count, const data_slice& prefix=data_slice()) const {
             return vlist_keys(start_key, count, prefix);
         }
 
-        std::vector<std::pair<ds_bulk_t,ds_bulk_t>> list_keyvals(
-                const ds_bulk_t &start_key, hg_size_t count, const ds_bulk_t& prefix=ds_bulk_t()) const {
+        std::vector<std::pair<data_slice,data_slice>> list_keyvals(
+                const data_slice &start_key, hg_size_t count, const data_slice& prefix=data_slice()) const {
             return vlist_keyvals(start_key, count, prefix);
         }
 
-        std::vector<ds_bulk_t> list_key_range(
-                const ds_bulk_t &lower_bound, const ds_bulk_t &upper_bound, hg_size_t max_keys=0) const {
+        std::vector<data_slice> list_key_range(
+                const data_slice &lower_bound, const data_slice &upper_bound, hg_size_t max_keys=0) const {
             return vlist_key_range(lower_bound, upper_bound, max_keys);
         }
 
-        std::vector<std::pair<ds_bulk_t,ds_bulk_t>> list_keyval_range(
-                const ds_bulk_t &lower_bound, const ds_bulk_t& upper_bound, hg_size_t max_keys=0) const {
+        std::vector<std::pair<data_slice,data_slice>> list_keyval_range(
+                const data_slice &lower_bound, const data_slice& upper_bound, hg_size_t max_keys=0) const {
             return vlist_keyval_range(lower_bound, upper_bound, max_keys);
         }
 
@@ -95,14 +95,14 @@ class AbstractDataStore {
         bool _debug;
         bool _in_memory;
 
-        virtual std::vector<ds_bulk_t> vlist_keys(
-                const ds_bulk_t &start_key, hg_size_t count, const ds_bulk_t& prefix) const = 0;
-        virtual std::vector<std::pair<ds_bulk_t,ds_bulk_t>> vlist_keyvals(
-                const ds_bulk_t &start_key, hg_size_t count, const ds_bulk_t& prefix) const = 0;
-        virtual std::vector<ds_bulk_t> vlist_key_range(
-                const ds_bulk_t &lower_bound, const ds_bulk_t &upper_bound, hg_size_t max_keys) const = 0;
-        virtual std::vector<std::pair<ds_bulk_t,ds_bulk_t>> vlist_keyval_range(
-                const ds_bulk_t &lower_bound, const ds_bulk_t& upper_bound, hg_size_t max_keys) const = 0;
+        virtual std::vector<data_slice> vlist_keys(
+                const data_slice &start_key, hg_size_t count, const data_slice& prefix) const = 0;
+        virtual std::vector<std::pair<data_slice,data_slice>> vlist_keyvals(
+                const data_slice &start_key, hg_size_t count, const data_slice& prefix) const = 0;
+        virtual std::vector<data_slice> vlist_key_range(
+                const data_slice &lower_bound, const data_slice &upper_bound, hg_size_t max_keys) const = 0;
+        virtual std::vector<std::pair<data_slice,data_slice>> vlist_keyval_range(
+                const data_slice &lower_bound, const data_slice& upper_bound, hg_size_t max_keys) const = 0;
 };
 
 #endif // datastore_h

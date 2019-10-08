@@ -6,7 +6,6 @@
 #include <map>
 #include <cstring>
 #include "kv-config.h"
-#include "bulk.h"
 #include "datastore/datastore.h"
 
 class MapDataStore : public AbstractDataStore {
@@ -17,12 +16,12 @@ class MapDataStore : public AbstractDataStore {
             MapDataStore* _store;
             keycmp(MapDataStore* store)
                 : _store(store) {}
-            bool operator()(const ds_bulk_t& a, const ds_bulk_t& b) const {
+            bool operator()(const data_slice& a, const data_slice& b) const {
                 if(_store->_less)
                     return _store->_less((const void*)a.data(),
                             a.size(), (const void*)b.data(), b.size()) < 0;
                 else
-                    return std::less<ds_bulk_t>()(a,b);
+                    return std::less<data_slice>()(a,b);
             }
         };
 
@@ -53,7 +52,7 @@ class MapDataStore : public AbstractDataStore {
 
         virtual void sync() override {}
 
-        virtual int put(const ds_bulk_t &key, const ds_bulk_t &data) override {
+        virtual int put(const data_slice &key, const data_slice &data) override {
             ABT_rwlock_wrlock(_map_lock);
             auto x = _map.count(key);
             if(_no_overwrite && (x != 0)) {
@@ -67,17 +66,17 @@ class MapDataStore : public AbstractDataStore {
 
         virtual int put(const void* key, hg_size_t ksize, const void* value, hg_size_t vsize) override {
             if(vsize != 0) {
-                ds_bulk_t k((const char*)key, ((const char*)key)+ksize);
-                ds_bulk_t v((const char*)value, ((const char*)value)+vsize);
+                data_slice k((const char*)key, ((const char*)key)+ksize);
+                data_slice v((const char*)value, ((const char*)value)+vsize);
                 return put(k, v);
             } else {
-                ds_bulk_t k((const char*)key, ((const char*)key)+ksize);
-                ds_bulk_t v;
+                data_slice k((const char*)key, ((const char*)key)+ksize);
+                data_slice v;
                 return put(std::move(k), std::move(v));
             }
         }
 
-        virtual bool get(const ds_bulk_t &key, ds_bulk_t &data) override {
+        virtual bool get(const data_slice &key, data_slice &data) override {
             ABT_rwlock_rdlock(_map_lock);
             auto it = _map.find(key);
             if(it == _map.end()) {
@@ -89,13 +88,13 @@ class MapDataStore : public AbstractDataStore {
             return true;
         }
 
-        virtual bool get(const ds_bulk_t &key, std::vector<ds_bulk_t>& values) override {
+        virtual bool get(const data_slice &key, std::vector<data_slice>& values) override {
             values.clear();
             values.resize(1);
             return get(key, values[0]);
         }
 
-        virtual bool exists(const ds_bulk_t& key) const override {
+        virtual bool exists(const data_slice& key) const override {
             ABT_rwlock_rdlock(_map_lock);
             bool e = _map.count(key) > 0;
             ABT_rwlock_unlock(_map_lock);
@@ -103,10 +102,10 @@ class MapDataStore : public AbstractDataStore {
         }
 
         virtual bool exists(const void* key, hg_size_t ksize) const override {
-            return exists(ds_bulk_t((const char*)key, ((const char*)key)+ksize));
+            return exists(data_slice((const char*)key, ((const char*)key)+ksize));
         }
 
-        virtual bool erase(const ds_bulk_t &key) override {
+        virtual bool erase(const data_slice &key) override {
             ABT_rwlock_wrlock(_map_lock);
             bool b = _map.find(key) != _map.end();
             _map.erase(key);
@@ -135,10 +134,10 @@ class MapDataStore : public AbstractDataStore {
 
     protected:
 
-        virtual std::vector<ds_bulk_t> vlist_keys(
-                const ds_bulk_t &start_key, hg_size_t count, const ds_bulk_t &prefix) const override {
+        virtual std::vector<data_slice> vlist_keys(
+                const data_slice &start_key, hg_size_t count, const data_slice &prefix) const override {
             ABT_rwlock_rdlock(_map_lock);
-            std::vector<ds_bulk_t> result;
+            std::vector<data_slice> result;
             decltype(_map.begin()) it;
             if(start_key.size() > 0) {
                 it = _map.upper_bound(start_key);
@@ -160,10 +159,10 @@ class MapDataStore : public AbstractDataStore {
             return result;
         }
 
-        virtual std::vector<std::pair<ds_bulk_t,ds_bulk_t>> vlist_keyvals(
-                const ds_bulk_t &start_key, hg_size_t count, const ds_bulk_t &prefix) const override {
+        virtual std::vector<std::pair<data_slice,data_slice>> vlist_keyvals(
+                const data_slice &start_key, hg_size_t count, const data_slice &prefix) const override {
             ABT_rwlock_rdlock(_map_lock);
-            std::vector<std::pair<ds_bulk_t,ds_bulk_t>> result;
+            std::vector<std::pair<data_slice,data_slice>> result;
             decltype(_map.begin()) it;
             if(start_key.size() > 0) {
                 it = _map.upper_bound(start_key);
@@ -185,10 +184,10 @@ class MapDataStore : public AbstractDataStore {
             return result;
         }
 
-        virtual std::vector<ds_bulk_t> vlist_key_range(
-                const ds_bulk_t &lower_bound, const ds_bulk_t &upper_bound, hg_size_t max_keys) const override {
+        virtual std::vector<data_slice> vlist_key_range(
+                const data_slice &lower_bound, const data_slice &upper_bound, hg_size_t max_keys) const override {
             ABT_rwlock_rdlock(_map_lock);
-            std::vector<ds_bulk_t> result;
+            std::vector<data_slice> result;
             decltype(_map.begin()) it, ub;
             // get the first element that goes immediately after lower_bound
             it = _map.upper_bound(lower_bound);
@@ -209,10 +208,10 @@ class MapDataStore : public AbstractDataStore {
             return result;
         }
 
-        virtual std::vector<std::pair<ds_bulk_t,ds_bulk_t>> vlist_keyval_range(
-                const ds_bulk_t &lower_bound, const ds_bulk_t& upper_bound, hg_size_t max_keys) const override {
+        virtual std::vector<std::pair<data_slice,data_slice>> vlist_keyval_range(
+                const data_slice &lower_bound, const data_slice& upper_bound, hg_size_t max_keys) const override {
             ABT_rwlock_rdlock(_map_lock);
-            std::vector<std::pair<ds_bulk_t,ds_bulk_t>> result;
+            std::vector<std::pair<data_slice,data_slice>> result;
             decltype(_map.begin()) it, ub;
             // get the first element that goes immediately after lower_bound
             it = _map.upper_bound(lower_bound);
@@ -235,7 +234,7 @@ class MapDataStore : public AbstractDataStore {
 
     private:
         AbstractDataStore::comparator_fn _less;
-        std::map<ds_bulk_t, ds_bulk_t, keycmp> _map;
+        std::map<data_slice, data_slice, keycmp> _map;
         ABT_rwlock _map_lock;
 };
 

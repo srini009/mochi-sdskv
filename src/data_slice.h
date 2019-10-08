@@ -1,16 +1,13 @@
-// Copyright (c) 2017, Los Alamos National Security, LLC.
-// All rights reserved.
-#ifndef bulk_h
-#define bulk_h
+#ifndef _data_slice_h
+#define _data_slice_h
 
 #include <stddef.h>
 #include "kv-config.h"
-//#include <boost/functional/hash.hpp>
 #include "fnv1a.h"
 #include <vector>
 #include <string>
 
-class ds_bulk_t {
+class data_slice {
     
     bool   _owns_data = false;
     size_t _size      = 0;
@@ -18,33 +15,33 @@ class ds_bulk_t {
 
     public:
 
-    ds_bulk_t() = default;
+    data_slice() = default;
 
-    ds_bulk_t(const char* begin, const char* end)
+    data_slice(const char* begin, const char* end)
     : _size(std::distance(begin, end))
     , _data(const_cast<char*>(begin)) {}
 
-    ds_bulk_t(const char* data, size_t size)
+    data_slice(const char* data, size_t size)
     : _size(size)
     , _data(const_cast<char*>(data)) {}
 
-    ds_bulk_t(size_t size)
+    data_slice(size_t size)
     : _owns_data(true)
     , _size(size)
     , _data((char*)malloc(size)) {}
 
-    ~ds_bulk_t() {
+    ~data_slice() {
         if(_owns_data) free(_data);
     }
 
-    ds_bulk_t(const ds_bulk_t& other)
+    data_slice(const data_slice& other)
     : _owns_data(true)
     , _size(other._size) {
         _data = (char*)malloc(_size);
         memcpy(_data, other._data, _size);
     }
 
-    ds_bulk_t(ds_bulk_t&& other)
+    data_slice(data_slice&& other)
     : _owns_data(other._owns_data)
     , _size(other._size)
     , _data(other._data) {
@@ -53,7 +50,7 @@ class ds_bulk_t {
         other._data = nullptr;
     }
 
-    ds_bulk_t& operator=(const ds_bulk_t& other) {
+    data_slice& operator=(const data_slice& other) {
         if(&other == this) return *this;
         if(_owns_data) free(_data);
         _owns_data = true;
@@ -63,7 +60,7 @@ class ds_bulk_t {
         return *this;
     }
 
-    ds_bulk_t& operator=(ds_bulk_t&& other) {
+    data_slice& operator=(data_slice&& other) {
         if(&other == this) return *this;
         if(_owns_data) free(_data);
         _owns_data = other._owns_data;
@@ -87,17 +84,17 @@ class ds_bulk_t {
         return _size;
     }
 
-    bool operator==(const ds_bulk_t& other) const {
+    bool operator==(const data_slice& other) const {
         if(_size != other._size) return false;
         if(_data == other._data) return true;
         return 0 == memcmp(_data, other._data, _size);
     }
 
-    bool operator!=(const ds_bulk_t& other) const {
+    bool operator!=(const data_slice& other) const {
         return !(*this == other);
     }
 
-    bool operator<(const ds_bulk_t& other) const {
+    bool operator<(const data_slice& other) const {
         if(_size == other._size) {
             if(_data == other._data) return false;
             int r = memcmp(_data, other._data, _size);
@@ -114,22 +111,22 @@ class ds_bulk_t {
     }
 };
 
-struct ds_bulk_hash {
-    size_t operator()(const ds_bulk_t &v) const {
+struct data_slice_hash {
+    size_t operator()(const data_slice &v) const {
         auto hashfn = fnv1a_t<8 * sizeof(std::size_t)> {};
         hashfn.update(v.data(), v.size());
         return hashfn.digest();
     }
 };
 
-struct ds_bulk_equal {
-    bool operator()(const ds_bulk_t &v1, const ds_bulk_t &v2) const {
+struct data_slice_equal {
+    bool operator()(const data_slice &v1, const data_slice &v2) const {
         return (v1 == v2);
     }
 };
 
-struct ds_bulk_less {
-    bool operator()(const ds_bulk_t &v1, const ds_bulk_t &v2) const {
+struct data_slice_less {
+    bool operator()(const data_slice &v1, const data_slice &v2) const {
         return (v1 < v2);
     }
 };
