@@ -5,7 +5,7 @@ includedir=@includedir@
 
 Name: sdskv-client
 Description: services-based keyval client
-Version: 0.1.4
+Version: 0.1.6
 URL: https://xgitlab.cels.anl.gov/sds/sds-keyval
 Requires: margo
 Libs: -L${libdir} -lsdskv-client
