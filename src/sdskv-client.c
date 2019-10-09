@@ -1816,7 +1816,7 @@ fallback_to_margo_bulk_create:
             void* buf = NULL;
             hg_size_t buf_size = 0;
             hg_uint32_t actual_count = 0;
-            ret = HG_Bulk_access(*handle, 0, total_size, HG_BULK_READWRITE, 1, &buf, &buf_size, &actual_count);
+            ret = margo_bulk_access(*handle, 0, total_size, HG_BULK_READWRITE, 1, &buf, &buf_size, &actual_count);
             if(ret != HG_SUCCESS || actual_count != 1) return HG_NOMEM_ERROR;
             for(i=0; i < count; i++) {
                 memcpy(buf, segments[i], sizes[i]);
@@ -1841,7 +1841,7 @@ static hg_return_t sync_bulk(
     void* bulk_buf = NULL;
     hg_size_t bulk_buf_size = 0;
     hg_uint32_t actual_count = 0;
-    hg_return_t ret = HG_Bulk_access(bulk, copy_offset, copy_size, HG_BULK_READWRITE, 1, &bulk_buf, &bulk_buf_size, &actual_count);
+    hg_return_t ret = margo_bulk_access(bulk, copy_offset, copy_size, HG_BULK_READWRITE, 1, &bulk_buf, &bulk_buf_size, &actual_count);
     if(ret != HG_SUCCESS || actual_count != 1) return HG_NOMEM_ERROR;
     hg_size_t current_offset = 0;
     hg_size_t remaining_size = copy_size;
