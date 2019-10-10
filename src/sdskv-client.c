@@ -1263,6 +1263,8 @@ int sdskv_list_keys_with_prefix(sdskv_provider_handle_t provider,
     hg_handle_t handle    = HG_HANDLE_NULL;
     int ret = SDSKV_SUCCESS;
     int i;
+    int keys_use_poolset = 0;
+    int ksizes_use_poolset = 0;
 
     if(*max_keys == 0) {
         return SDSKV_SUCCESS;
@@ -1280,12 +1282,11 @@ int sdskv_list_keys_with_prefix(sdskv_provider_handle_t provider,
     /* create bulk handle to expose the segments with key sizes */
     hg_size_t ksize_bulk_size = (*max_keys)*sizeof(*ksizes);
     void* buf_ptr[1] = { ksizes };
-    hret = margo_bulk_create(provider->client->mid,
-                             1, buf_ptr, &ksize_bulk_size,
-                             HG_BULK_READWRITE,
-                             &in.ksizes_bulk_handle);
+
+    hret = create_bulk(provider->client, 1, buf_ptr, &ksize_bulk_size,
+            HG_BULK_READWRITE, &ksizes_use_poolset, &in.ksizes_bulk_handle);
     if(hret != HG_SUCCESS) {
-        ret = SDSKV_ERR_MERCURY;
+        ret = SDSKV_ERR_POOLSET;
         goto finish;
     }
 
@@ -1304,12 +1305,10 @@ int sdskv_list_keys_with_prefix(sdskv_provider_handle_t provider,
 
     /* create bulk handle to expose where the keys should be placed */
     if(!requesting_sizes) {
-        hret = margo_bulk_create(provider->client->mid,
-                             *max_keys, keys, ksizes,
-                             HG_BULK_WRITE_ONLY,
-                             &in.keys_bulk_handle);
+        hret = create_bulk(provider->client, *max_keys, keys, ksizes,
+                HG_BULK_WRITE_ONLY, &keys_use_poolset, &in.keys_bulk_handle);
         if(hret != HG_SUCCESS) {
-            ret = SDSKV_ERR_MERCURY;
+            ret = SDSKV_ERR_POOLSET;
             goto finish;
         }
     }
@@ -1338,6 +1337,29 @@ int sdskv_list_keys_with_prefix(sdskv_provider_handle_t provider,
         ret = SDSKV_ERR_MERCURY;
         goto finish;
     }
+        
+    // compute total size that was available for keys
+    hg_size_t total_size = 0;
+    for(i=0; i < *max_keys; i++) {
+        total_size += ksizes[i];
+    }
+
+    /* synchronize the bulk handle containing actual key sizes with user-provided buffer */
+    hret = sync_bulk(provider->client, in.ksizes_bulk_handle, 0, ksize_bulk_size,
+                     1, buf_ptr, &ksize_bulk_size, ksizes_use_poolset);
+    if(hret != HG_SUCCESS) {
+        ret = SDSKV_ERR_POOLSET;
+        goto finish;
+    }
+
+    if(!requesting_sizes) {
+        hret = sync_bulk(provider->client, in.keys_bulk_handle, 0, total_size,
+                *max_keys, keys, ksizes, keys_use_poolset);
+        if(hret != HG_SUCCESS) {
+            ret = SDSKV_ERR_POOLSET;
+            goto finish;
+        }
+    }
 
     /* set return values */
     *max_keys = out.nkeys;
@@ -1345,8 +1367,8 @@ int sdskv_list_keys_with_prefix(sdskv_provider_handle_t provider,
 
 finish:
     /* free everything we created */
-    margo_bulk_free(in.ksizes_bulk_handle);
-    margo_bulk_free(in.keys_bulk_handle);
+    destroy_bulk(provider->client, ksizes_use_poolset, in.ksizes_bulk_handle);
+    destroy_bulk(provider->client, keys_use_poolset, in.keys_bulk_handle);
     margo_free_output(handle, &out);
     margo_destroy(handle);
 
