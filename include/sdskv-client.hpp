@@ -166,6 +166,25 @@ class client {
     }
 
     /**
+     * @brief Configures a poolset to be used for all transfers
+     * from this client.
+     *
+     * @param npools Number of pools
+     * @param nbufs Number of buffers per pool
+     * @param first_size Size of buffers in the first pool
+     * @param size_multiple Buffer size multiple from a pool to the next one
+     */
+    void configure_bulk_poolset(
+            size_t npools,
+            size_t nbufs,
+            size_t first_size,
+            size_t size_multiple) {
+        int ret = sdskv_client_configure_bulk_poolset(m_client,
+                npools, nbufs, first_size, size_multiple);
+        _CHECK_RET(ret);
+    }
+
+    /**
      * @brief Open a database held by a given provider.
      *
      * @param ph Provider handle.
