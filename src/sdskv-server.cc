@@ -2585,6 +2585,7 @@ static hg_return_t allocate_buffer_and_bulk(
         hg_bulk_t* bulk,
         bool* use_poolset)
 {
+    *bulk = HG_BULK_NULL;
     if(provider->poolset == NULL) {
 fallback_to_creating_bulk:
         *use_poolset = false;
@@ -2597,7 +2598,7 @@ fallback_to_creating_bulk:
         return ret;
     } else {
         *use_poolset = true;
-        int ret = margo_bulk_poolset_get(provider->poolset, size, bulk);
+        int ret = margo_bulk_poolset_tryget(provider->poolset, size, 1, bulk);
         if(ret == -1) goto fallback_to_creating_bulk;
         void* bulk_buf = NULL;
         hg_size_t bulk_buf_size = 0;
