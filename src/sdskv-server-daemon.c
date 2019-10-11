@@ -115,6 +115,25 @@ int main(int argc, char **argv)
 
     parse_args(argc, argv, &opts);
 
+    int use_poolset = 0;
+    hg_size_t poolset_npools = 6;
+    hg_size_t poolset_nbufs = 8;
+    hg_size_t poolset_first_size = 128;
+    hg_size_t poolset_size_multiple = 2;
+
+    char* var = getenv("SDSKV_SERVER_USE_POOLSET");
+    if(var != NULL) {
+        use_poolset = 1;
+        var = getenv("SDSKV_SERVER_POOLSET_NPOOLS");
+        if(var != NULL) poolset_npools = atol(var);
+        var = getenv("SDSKV_SERVER_POOLSET_NBUFS");
+        if(var != NULL) poolset_nbufs = atol(var);
+        var = getenv("SDSKV_SERVER_POOLSET_FIRST_SIZE");
+        if(var != NULL) poolset_first_size = atol(var);
+        var = getenv("SDSKV_SERVER_POOLSET_SIZE_MULTIPLE");
+        if(var != NULL) poolset_size_multiple = atol(var);
+    }
+
     /* start margo */
     /* use the main xstream for driving progress and executing rpc handlers */
     mid = margo_init(opts.listen_addr_str, MARGO_SERVER_MODE, 0, -1);
@@ -206,6 +225,10 @@ int main(int argc, char **argv)
                 return(-1);
             }
 
+            if(use_poolset) {
+                sdskv_provider_configure_bulk_poolset(provider,
+                        poolset_npools, poolset_nbufs, poolset_first_size, poolset_size_multiple);
+            }
             printf("Provider %d managing database \"%s\" at multiplex id %d\n", i, opts.db_names[i], i+1);
         }
 
@@ -249,6 +272,10 @@ int main(int argc, char **argv)
                 return(-1);
             }
 
+            if(use_poolset) {
+                sdskv_provider_configure_bulk_poolset(provider,
+                        poolset_npools, poolset_nbufs, poolset_first_size, poolset_size_multiple);
+            }
             printf("Provider 0 managing database \"%s\" at multiplex id %d\n", opts.db_names[i] , 1);
         }
     }
