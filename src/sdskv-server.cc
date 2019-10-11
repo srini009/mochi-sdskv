@@ -1518,6 +1518,11 @@ static void sdskv_list_keys_ult(hg_handle_t handle)
     hg_bulk_t ksizes_local_bulk = HG_BULK_NULL;
     hg_bulk_t keys_local_bulk   = HG_BULK_NULL;
 
+    hg_size_t* client_ksizes = nullptr;
+    char* packed_keys_buffer = nullptr;
+    bool ksizes_use_poolset = false;
+    bool keys_use_poolset = false;
+
     out.ret     = SDSKV_SUCCESS;
     out.nkeys   = 0;
 
@@ -1559,17 +1564,13 @@ static void sdskv_list_keys_ult(hg_handle_t handle)
         ABT_rwlock_unlock(svr_ctx->lock);
 
         /* create a bulk handle to receive and send key sizes from client */
-        std::vector<hg_size_t> ksizes(in.max_keys);
-        std::vector<void*> ksizes_addr(1);
-        ksizes_addr[0] = (void*)ksizes.data();
-        hg_size_t ksizes_bulk_size = ksizes.size()*sizeof(hg_size_t);
-        hret = margo_bulk_create(mid, 1, ksizes_addr.data(), 
-                &ksizes_bulk_size, HG_BULK_READWRITE, &ksizes_local_bulk);
+        hg_size_t ksizes_bulk_size = in.max_keys*sizeof(hg_size_t);
+        hret = allocate_buffer_and_bulk(svr_ctx,
+                ksizes_bulk_size, HG_BULK_READWRITE, (char**)&client_ksizes,
+                &ksizes_local_bulk, &ksizes_use_poolset);
         if(hret != HG_SUCCESS) {
-            std::cerr << "Error: SDSKV list_keys could not create bulk handle (ksizes_local_bulk)" << std::endl;
-            throw SDSKV_ERR_MERCURY;
+            throw SDSKV_ERR_POOLSET;
         }
-
 
         /* receive the key sizes from the client */
         hg_addr_t origin_addr = info->addr;
@@ -1582,7 +1583,7 @@ static void sdskv_list_keys_ult(hg_handle_t handle)
         }
 
         /* make a copy of the remote key sizes */
-        std::vector<hg_size_t> remote_ksizes(ksizes.begin(), ksizes.end());
+        std::vector<hg_size_t> remote_ksizes(client_ksizes, client_ksizes + in.max_keys);
 
         /* get the keys from the underlying database */    
         data_slice start_kdata(in.start_key.data, in.start_key.data+in.start_key.size);
@@ -1598,15 +1599,15 @@ static void sdskv_list_keys_ult(hg_handle_t handle)
         bool size_error = false;
         for(unsigned i = 0; i < num_keys; i++) {
             true_ksizes[i] = keys[i].size();
-            if(true_ksizes[i] > ksizes[i]) {
+            if(true_ksizes[i] > client_ksizes[i]) {
                 // this key has a size that exceeds the allocated size on client
                 size_error = true;
             }
-            ksizes[i] = true_ksizes[i];
-            keys_bulk_size += ksizes[i];
+            client_ksizes[i] = true_ksizes[i];
+            keys_bulk_size += true_ksizes[i];
         }
         for(unsigned i = num_keys; i < in.max_keys; i++) {
-            ksizes[i] = 0;
+            client_ksizes[i] = 0;
         }
         out.nkeys = num_keys;
 
@@ -1623,20 +1624,22 @@ static void sdskv_list_keys_ult(hg_handle_t handle)
         if(size_error)
             throw SDSKV_ERR_SIZE;
 
-        /* create an array of addresses pointing to keys */
-        std::vector<void*> keys_addr(num_keys);
-        for(unsigned i=0; i < num_keys; i++) {
-            keys_addr[i] = (void*)(keys[i].data());
-        }
+        if(keys_bulk_size == 0)
+            throw SDSKV_SUCCESS;
 
-        /* expose the keys for bulk transfer */
-        hret = margo_bulk_create(mid, num_keys, keys_addr.data(),
-                true_ksizes.data(), HG_BULK_READ_ONLY, &keys_local_bulk);
+        /* allocate a buffer for packed keys */
+        hret = allocate_buffer_and_bulk(svr_ctx,
+                keys_bulk_size, HG_BULK_READ_ONLY, (char**)&packed_keys_buffer,
+                &keys_local_bulk, &keys_use_poolset);
         if(hret != HG_SUCCESS) {
-            std::cerr << "Error: SDSKV list_keys could not create bulk handle (keys_local_bulk)" << std::endl;
-            throw SDSKV_ERR_MERCURY;
+            throw SDSKV_ERR_POOLSET;
+        } 
+        /* copy the keys into the buffer */
+        size_t offset = 0;
+        for(unsigned i=0; i < num_keys; i++) {
+            memcpy(packed_keys_buffer + offset, keys[i].data(), keys[i].size());
+            offset += keys[i].size();
         }
-
         /* transfer the keys to the client */
         uint64_t remote_offset = 0;
         uint64_t local_offset  = 0;
@@ -1661,8 +1664,8 @@ static void sdskv_list_keys_ult(hg_handle_t handle)
         out.ret = exc_no;
     }
 
-    margo_bulk_free(ksizes_local_bulk);
-    margo_bulk_free(keys_local_bulk);
+    free_buffer_and_bulk(svr_ctx, (char*)client_ksizes, ksizes_local_bulk, ksizes_use_poolset);
+    free_buffer_and_bulk(svr_ctx, packed_keys_buffer, keys_local_bulk, keys_use_poolset);
     margo_respond(handle, &out);
     margo_free_input(handle, &in);
     margo_destroy(handle); 
@@ -1681,6 +1684,16 @@ static void sdskv_list_keyvals_ult(hg_handle_t handle)
     hg_bulk_t keys_local_bulk   = HG_BULK_NULL;
     hg_bulk_t vsizes_local_bulk = HG_BULK_NULL;
     hg_bulk_t vals_local_bulk   = HG_BULK_NULL;
+
+    hg_size_t* ksizes = nullptr;
+    hg_size_t* vsizes = nullptr;
+    char* packed_keys = nullptr;
+    char* packed_vals = nullptr;
+
+    bool ksizes_use_poolset;
+    bool vsizes_use_poolset;
+    bool keys_use_poolset;
+    bool vals_use_poolset;
 
     out.ret     = SDSKV_SUCCESS;
     out.nkeys   = 0;
@@ -1723,27 +1736,19 @@ static void sdskv_list_keyvals_ult(hg_handle_t handle)
         ABT_rwlock_unlock(svr_ctx->lock);
 
         /* create a bulk handle to receive and send key sizes from client */
-        std::vector<hg_size_t> ksizes(in.max_keys);
-        std::vector<void*> ksizes_addr(1);
-        ksizes_addr[0] = (void*)ksizes.data();
-        hg_size_t ksizes_bulk_size = ksizes.size()*sizeof(hg_size_t);
-        hret = margo_bulk_create(mid, 1, ksizes_addr.data(), 
-                &ksizes_bulk_size, HG_BULK_READWRITE, &ksizes_local_bulk);
+        hg_size_t ksizes_bulk_size = in.max_keys*sizeof(*ksizes);
+        hret = allocate_buffer_and_bulk(svr_ctx, ksizes_bulk_size, HG_BULK_READWRITE,
+                (char**)&ksizes, &ksizes_local_bulk, &ksizes_use_poolset);
         if(hret != HG_SUCCESS) {
-            std::cerr << "Error: SDSKV list_keyvals could not create bulk handle (ksizes_local_bulk)" << std::endl;
-            throw SDSKV_ERR_MERCURY;
+            throw SDSKV_ERR_POOLSET;
         }
 
         /* create a bulk handle to receive and send value sizes from client */
-        std::vector<hg_size_t> vsizes(in.max_keys);
-        std::vector<void*> vsizes_addr(1);
-        vsizes_addr[0] = (void*)vsizes.data();
-        hg_size_t vsizes_bulk_size = vsizes.size()*sizeof(hg_size_t);
-        hret = margo_bulk_create(mid, 1, vsizes_addr.data(), 
-                &vsizes_bulk_size, HG_BULK_READWRITE, &vsizes_local_bulk);
+        hg_size_t vsizes_bulk_size = in.max_keys*sizeof(hg_size_t);
+        hret = allocate_buffer_and_bulk(svr_ctx, vsizes_bulk_size, HG_BULK_READWRITE,
+                (char**)&vsizes, &vsizes_local_bulk, &vsizes_use_poolset);
         if(hret != HG_SUCCESS) {
-            std::cerr << "Error: SDSKV list_keyvals could not create bulk handle (vsizes_local_bulk)" << std::endl;
-            throw SDSKV_ERR_MERCURY;
+            throw SDSKV_ERR_POOLSET;
         }
 
         /* receive the key sizes from the client */
@@ -1766,8 +1771,8 @@ static void sdskv_list_keyvals_ult(hg_handle_t handle)
         }
 
         /* make a copy of the remote key sizes and value sizes */
-        std::vector<hg_size_t> remote_ksizes(ksizes.begin(), ksizes.end());
-        std::vector<hg_size_t> remote_vsizes(vsizes.begin(), vsizes.end());
+        std::vector<hg_size_t> remote_ksizes(ksizes, ksizes + in.max_keys);
+        std::vector<hg_size_t> remote_vsizes(vsizes, vsizes + in.max_keys);
 
         /* get the keys and values from the underlying database */    
         data_slice start_kdata(in.start_key.data, in.start_key.data+in.start_key.size);
@@ -1791,9 +1796,9 @@ static void sdskv_list_keyvals_ult(hg_handle_t handle)
                 size_error = true;
             } 
             ksizes[i] = true_ksizes[i];
-            keys_bulk_size += ksizes[i];
+            keys_bulk_size += true_ksizes[i];
         }
-        for(unsigned i = num_keys; i < ksizes.size(); i++) ksizes[i] = 0;
+        for(unsigned i = num_keys; i < in.max_keys; i++) ksizes[i] = 0;
 
         /* create the array of actual value sizes */
         std::vector<hg_size_t> true_vsizes(num_keys);
@@ -1805,9 +1810,9 @@ static void sdskv_list_keyvals_ult(hg_handle_t handle)
                 size_error = true;
             }
             vsizes[i] = true_vsizes[i];
-            vals_bulk_size += vsizes[i];
+            vals_bulk_size += true_vsizes[i];
         }
-        for(unsigned i = num_keys; i < vsizes.size(); i++) vsizes[i] = 0;
+        for(unsigned i = num_keys; i < in.max_keys; i++) vsizes[i] = 0;
 
         /* transfer the ksizes back to the client */
         if(ksizes_bulk_size) {
@@ -1834,34 +1839,27 @@ static void sdskv_list_keyvals_ult(hg_handle_t handle)
         if(size_error)
             throw SDSKV_ERR_SIZE;
 
-        /* create an array of addresses pointing to keys */
-        std::vector<void*> keys_addr(num_keys);
+        /* allocate a buffer for packed keys and a buffer for packed values, and copy keys and values */
+        hret = allocate_buffer_and_bulk(svr_ctx, keys_bulk_size, HG_BULK_READ_ONLY,
+                &packed_keys, &keys_local_bulk, &keys_use_poolset);
+        if(hret != HG_SUCCESS)
+            throw SDSKV_ERR_POOLSET;
+        if(vals_bulk_size != 0) {
+            hret = allocate_buffer_and_bulk(svr_ctx, vals_bulk_size, HG_BULK_READ_ONLY,
+                    &packed_vals, &vals_local_bulk, &vals_use_poolset);
+            if(hret != HG_SUCCESS)
+                throw SDSKV_ERR_POOLSET;
+        }
+
+        size_t vals_offset = 0;
+        size_t keys_offset = 0;
         for(unsigned i=0; i < num_keys; i++) {
-            keys_addr[i] = (void*)(keyvals[i].first.data());
+            memcpy(packed_keys + keys_offset, keyvals[i].first.data(), keyvals[i].first.size());
+            if(keyvals[i].second.size() != 0)
+                memcpy(packed_vals + vals_offset, keyvals[i].second.data(), keyvals[i].second.size());
+            keys_offset += keyvals[i].first.size();
+            vals_offset += keyvals[i].second.size();
         }
-
-        /* create an array of addresses pointing to values */
-        std::vector<void*> vals_addr(num_keys);
-        for(unsigned i=0; i < num_keys; i++) {
-            vals_addr[i] = (void*)(keyvals[i].second.data());
-        }
-
-        /* expose the keys for bulk transfer */
-        hret = margo_bulk_create(mid, num_keys, keys_addr.data(),
-                true_ksizes.data(), HG_BULK_READ_ONLY, &keys_local_bulk);
-        if(hret != HG_SUCCESS) {
-            std::cerr << "Error: SDSKV list_keyvals could not create bulk handle (keys_local_bulk)" << std::endl;
-            throw SDSKV_ERR_MERCURY;
-        }
-
-        /* expose the values for bulk transfer */
-        hret = margo_bulk_create(mid, num_keys, vals_addr.data(),
-                true_vsizes.data(), HG_BULK_READ_ONLY, &vals_local_bulk);
-        if(hret != HG_SUCCESS) {
-            std::cerr << "Error: SDSKV list_keyvals could not create bulk handle (vals_local_bulk)" << std::endl;
-            throw SDSKV_ERR_MERCURY;
-        }
-
 
         uint64_t remote_offset = 0;
         uint64_t local_offset  = 0;
@@ -1903,10 +1901,10 @@ static void sdskv_list_keyvals_ult(hg_handle_t handle)
         out.ret = exc_no;
     }
 
-    margo_bulk_free(ksizes_local_bulk);
-    margo_bulk_free(keys_local_bulk);
-    margo_bulk_free(vsizes_local_bulk);
-    margo_bulk_free(vals_local_bulk);
+    free_buffer_and_bulk(svr_ctx, (char*)ksizes, ksizes_local_bulk, ksizes_use_poolset);
+    free_buffer_and_bulk(svr_ctx, (char*)vsizes, vsizes_local_bulk, vsizes_use_poolset);
+    free_buffer_and_bulk(svr_ctx, packed_keys, keys_local_bulk, keys_use_poolset);
+    free_buffer_and_bulk(svr_ctx, packed_vals, vals_local_bulk, vals_use_poolset);
     margo_respond(handle, &out);
     margo_free_input(handle, &in);
     margo_destroy(handle); 
