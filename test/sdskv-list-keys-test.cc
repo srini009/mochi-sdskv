@@ -32,6 +32,25 @@ int main(int argc, char *argv[])
     hg_return_t hret;
     int ret;
 
+    int use_poolset = 0;
+    hg_size_t poolset_npools = 8;
+    hg_size_t poolset_nbufs = 8;
+    hg_size_t poolset_first_size = 10240;
+    hg_size_t poolset_size_multiple = 2;
+
+    char* var = getenv("SDSKV_USE_POOLSET");
+    if(var != NULL) {
+        use_poolset = 1;
+        var = getenv("SDSKV_POOLSET_NPOOLS");
+        if(var != NULL) poolset_npools = atol(var);
+        var = getenv("SDSKV_POOLSET_NBUFS");
+        if(var != NULL) poolset_nbufs = atol(var);
+        var = getenv("SDSKV_POOLSET_FIRST_SIZE");
+        if(var != NULL) poolset_first_size = atol(var);
+        var = getenv("SDSKV_POOLSET_SIZE_MULTIPLE");
+        if(var != NULL) poolset_size_multiple = atol(var);
+    }
+
     if(argc != 5)
     {
         fprintf(stderr, "Usage: %s <sdskv_server_addr> <mplex_id> <db_name> <num_keys>\n", argv[0]);
@@ -63,6 +82,18 @@ int main(int argc, char *argv[])
         fprintf(stderr, "Error: sdskv_client_init()\n");
         margo_finalize(mid);
         return -1;
+    }
+
+    /* setup poolset if requested */
+    if(use_poolset) {
+        ret = sdskv_client_configure_bulk_poolset(
+                kvcl, poolset_npools, poolset_nbufs,
+                poolset_first_size, poolset_size_multiple);
+        if(ret != 0) {
+            fprintf(stderr, "Error: sdskv_client_configure_bulk_poolset()\n");
+            margo_finalize(mid);
+            return -1;
+        }
     }
 
     /* look up the SDSKV server address */
