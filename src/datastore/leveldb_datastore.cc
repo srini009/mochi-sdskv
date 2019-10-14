@@ -21,7 +21,7 @@ LevelDBDataStore::LevelDBDataStore(bool eraseOnGet, bool debug) :
 };
   
 std::string LevelDBDataStore::toString(const data_slice &bulk_val) {
-  std::string str_val(bulk_val.begin(), bulk_val.end());
+  std::string str_val(bulk_val.data(), bulk_val.size());
   return str_val;
 };
 
@@ -31,7 +31,7 @@ std::string LevelDBDataStore::toString(const char* buf, hg_size_t buf_size) {
 };
 
 data_slice LevelDBDataStore::fromString(const std::string &str_val) {
-  data_slice bulk_val(str_val.begin(), str_val.end());
+  data_slice bulk_val(str_val.data(), str_val.data()+str_val.size());
   return bulk_val;
 };
 
@@ -107,7 +107,6 @@ bool LevelDBDataStore::get(const data_slice &key, data_slice &data) {
   bool success = false;
 
   //high_resolution_clock::time_point start = high_resolution_clock::now();
-  data.clear();
   std::string value;
   status = _dbm->Get(leveldb::ReadOptions(), toString(key), &value);
   if (status.ok()) {
@@ -115,6 +114,7 @@ bool LevelDBDataStore::get(const data_slice &key, data_slice &data) {
     success = true;
   }
   else if (!status.IsNotFound()) {
+    data = data_slice(0);
     std::cerr << "LevelDBDataStore::get: LevelDB error on Get = " << status.ToString() << std::endl;
   }
 //  uint64_t elapsed = duration_cast<microseconds>(high_resolution_clock::now()-start).count();
