@@ -21,9 +21,10 @@ class data_slice {
     : _size(std::distance(begin, end))
     , _data(const_cast<char*>(begin)) {}
 
-    data_slice(const char* data, size_t size)
+    data_slice(const char* data, size_t size, bool owner=false)
     : _size(size)
-    , _data(const_cast<char*>(data)) {}
+    , _data(const_cast<char*>(data))
+    , _owns_data(owner) {}
 
     data_slice(size_t size)
     : _owns_data(true)

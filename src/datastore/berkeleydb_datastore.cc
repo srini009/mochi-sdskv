@@ -222,9 +222,7 @@ bool BerkeleyDBDataStore::get(const data_slice &key, data_slice &data) {
   int status = 0;
   bool success = false;
 
-  data.clear();
-
-  Dbt db_key((void*)&(key[0]), uint32_t(key.size()));
+  Dbt db_key((void*)key.data(), uint32_t(key.size()));
   db_key.set_ulen(uint32_t(key.size()));
   Dbt db_data;
   db_key.set_flags(DB_DBT_USERMEM);
@@ -232,11 +230,13 @@ bool BerkeleyDBDataStore::get(const data_slice &key, data_slice &data) {
   status = _dbm->get(NULL, &db_key, &db_data, 0);
 
   if (status != DB_NOTFOUND && status != DB_KEYEMPTY) {
-    data.resize(db_data.get_size(), 0);
-    if(db_data.get_size() > 0) {
-        memcpy(&(data[0]), db_data.get_data(), db_data.get_size());
+    data_slice slice(db_data.get_size());
+    if(db_data.get_size() == 0) {
+        data = data_slice(0);
+        free(db_data.get_data());
+    } else {
+        data = std::move(data_slice((const char*)db_data.get_data(), db_data.get_size(), true));
     }
-    free(db_data.get_data());
     success = true;
   }
   else {
