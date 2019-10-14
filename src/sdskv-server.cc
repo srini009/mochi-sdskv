@@ -2599,7 +2599,7 @@ fallback_to_creating_bulk:
     } else {
         *use_poolset = true;
         int ret = margo_bulk_poolset_tryget(provider->poolset, size, 1, bulk);
-        if(ret == -1) goto fallback_to_creating_bulk;
+        if(ret == -1 || *bulk == HG_BULK_NULL) goto fallback_to_creating_bulk;
         void* bulk_buf = NULL;
         hg_size_t bulk_buf_size = 0;
         hg_uint32_t actual_count = 0;
