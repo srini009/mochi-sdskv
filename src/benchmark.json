@@ -1,6 +1,14 @@
 {
     "protocol" : "tcp",
     "seed" : 0,
+    "client" : {
+        "poolset" : {
+            "pools" : 8,
+            "buffers" : 8,
+            "min_size" : 1024,
+            "size_factor" : 2
+        }
+    },
     "server" : {
         "use-progress-thread" : false,
         "rpc-thread-count" : 0,
@@ -8,6 +16,12 @@
             "type" : "map",
             "name" : "benchmark-db",
             "path" : "/dev/shm"
+        },
+        "poolset" : {
+            "pools" : 8,
+            "buffers" : 8,
+            "min_size" : 1024,
+            "size_factor" : 2
         }
     },
     "benchmarks" : [

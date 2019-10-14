@@ -759,6 +759,15 @@ static void run_server(MPI_Comm comm, Json::Value& config) {
     MPI_Bcast(server_addr_str.data(), buf_size, MPI_BYTE, 0, MPI_COMM_WORLD);
     // initialize sdskv provider
     auto provider = sdskv::provider::create(mid);
+    // initialize poolset if present
+    if(server_config["poolset"]) {
+        auto& poolset_config = server_config["poolset"];
+        int npools = poolset_config.get("pools",1).asInt();
+        int nbufs = poolset_config.get("buffers",10).asInt();
+        int min_size = poolset_config.get("min_size", 1024).asInt();
+        int size_factor = poolset_config.get("size_factor", 2).asInt();
+        provider->configure_bulk_poolset(npools, nbufs, min_size, size_factor);
+    }
     // initialize database
     auto& database_config = server_config["database"];
     std::string db_name = database_config["name"].asString();
@@ -799,8 +808,21 @@ static void run_client(MPI_Comm comm, Json::Value& config) {
     // wait for server to have initialize the database
     MPI_Barrier(MPI_COMM_WORLD);
     {
-        // open remote database
+        // create client
         sdskv::client client(mid);
+        // setup poolset
+        if(config["client"]) {
+            auto& client_config = config["client"];
+            if(client_config["poolset"]) {
+                auto& poolset_config = client_config["poolset"];
+                int npools = poolset_config.get("pools",1).asInt();
+                int nbufs = poolset_config.get("buffers",10).asInt();
+                int min_size = poolset_config.get("min_size", 1024).asInt();
+                int size_factor = poolset_config.get("size_factor", 2).asInt();
+                client.configure_bulk_poolset(npools, nbufs, min_size, size_factor);
+            }
+        }
+        // open database
         sdskv::provider_handle ph(client, server_addr);
         std::string db_name = config["server"]["database"]["name"].asString();
         RemoteDatabase db = client.open(ph, db_name);
