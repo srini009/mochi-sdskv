@@ -31,8 +31,9 @@ std::string LevelDBDataStore::toString(const char* buf, hg_size_t buf_size) {
 };
 
 data_slice LevelDBDataStore::fromString(const std::string &str_val) {
-  data_slice bulk_val(str_val.data(), str_val.data()+str_val.size());
-  return bulk_val;
+  data_slice bulk_val(str_val.data(), str_val.size());
+  data_slice copy = bulk_val; // force a copy to take ownership
+  return copy;
 };
 
 LevelDBDataStore::~LevelDBDataStore() {
