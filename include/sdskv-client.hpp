@@ -237,6 +237,10 @@ class client {
         put(db, object_data(key), object_size(key), object_data(value), object_size(value));
     }
 
+    //////////////////////////
+    // PUT_MULTI methods
+    //////////////////////////
+
     /**
      * @brief Equivalent to sdskv_put_multi.
      *
@@ -247,13 +251,10 @@ class client {
      * @param values Array of values.
      * @param vsizes Array of value sizes.
      */
-    void put(const database& db,
+    void put_multi(const database& db,
              hg_size_t count, const void* const* keys, const hg_size_t* ksizes,
              const void* const* values, const hg_size_t *vsizes) const;
 
-    //////////////////////////
-    // PUT_MULTI methods
-    //////////////////////////
 
     /**
      * @brief Version of put taking std::vectors instead of arrays of pointers.
@@ -264,7 +265,7 @@ class client {
      * @param values Vector of pointers to values.
      * @param vsizes Vector of value sizes.
      */
-    inline void put(const database& db,
+    inline void put_multi(const database& db,
              const std::vector<const void*>& keys, const std::vector<hg_size_t>& ksizes,
              const std::vector<const void*>& values, const  std::vector<hg_size_t>& vsizes) const {
         if(keys.size() != ksizes.size()
@@ -272,7 +273,7 @@ class client {
         || keys.size() != vsizes.size()) {
             throw std::length_error("Provided vectors should have the same size");
         }
-        put(db, keys.size(), keys.data(),  ksizes.data(), values.data(), vsizes.data());
+        put_multi(db, keys.size(), keys.data(),  ksizes.data(), values.data(), vsizes.data());
     }
 
     /**
@@ -286,7 +287,7 @@ class client {
      * @param values Vector of values.
      */
     template<typename K, typename V>
-    inline void put(const database& db,
+    inline void put_multi(const database& db,
              const std::vector<K>& keys, const std::vector<V>& values) {
         if(keys.size() != values.size()) {
             throw std::length_error("Provided vectors should have the same size");
@@ -303,7 +304,7 @@ class client {
             vsizes.push_back(object_size(v));
             vdata.push_back(object_data(v));
         }
-        put(db, kdata, ksizes, vdata, vsizes);
+        put_multi(db, kdata, ksizes, vdata, vsizes);
     }
 
     /**
@@ -320,7 +321,7 @@ class client {
      * @param vend end of the iterator to values.
      */
     template<typename IK, typename IV>
-    inline void put(const database& db,
+    inline void put_multi(const database& db,
              const IK& kbegin, const IK& kend,
              const IV& vbegin, const IV& vend) const {
         hg_size_t count = std::distance(kbegin, kend);
@@ -339,7 +340,7 @@ class client {
             vsizes.push_back(object_size(*it));
             vdata.push_back(object_data(*it));
         }
-        put(db, kdata, ksizes, vdata, vsizes);
+        put_multi(db, kdata, ksizes, vdata, vsizes);
     }
 
     //////////////////////////
@@ -418,7 +419,7 @@ class client {
      * @param ksizes Array of key sizes.
      * @param vsizes Resulting value sizes.
      */
-    bool length(const database& db,
+    bool length_multi(const database& db,
             hg_size_t num, const void* const* keys,
             const hg_size_t* ksizes, hg_size_t* vsizes) const;
 
@@ -432,7 +433,7 @@ class client {
      * @param vsizes Resulting vector of value sizes.
      */
     template<typename K>
-    inline bool length(const database& db,
+    inline bool length_multi(const database& db,
             const std::vector<K>& keys,
             std::vector<hg_size_t>& vsizes) const {
         vsizes.resize(keys.size());
@@ -442,7 +443,7 @@ class client {
             kdata.push_back(object_data(k));
             ksizes.push_back(object_size(k));
         }
-        return length(db, keys.size(), kdata.data(), ksizes.data(), vsizes.data());
+        return length_multi(db, keys.size(), kdata.data(), ksizes.data(), vsizes.data());
     }
 
     /**
@@ -457,9 +458,9 @@ class client {
      * @return Vector of corresponding value sizes.
      */
     template<typename K>
-    inline std::vector<hg_size_t> length(const database& db, const std::vector<K>& keys) const {
+    inline std::vector<hg_size_t> length_multi(const database& db, const std::vector<K>& keys) const {
         std::vector<hg_size_t> vsizes(keys.size());
-        length(db, keys, vsizes);
+        length_multi(db, keys, vsizes);
         return vsizes;
     }
 
@@ -547,7 +548,7 @@ class client {
      * @param values Array of value buffers.
      * @param vsizes Array of sizes of value buffers.
      */
-    bool get(const database& db,
+    bool get_multi(const database& db,
              hg_size_t count, const void* const* keys, const hg_size_t* ksizes,
              void** values, hg_size_t *vsizes) const;
 
@@ -560,7 +561,7 @@ class client {
      * @param values Vector of value addresses.
      * @param vsizes Vector of value sizes.
      */
-    inline bool get(const database& db,
+    inline bool get_multi(const database& db,
              const std::vector<const void*>& keys, const std::vector<hg_size_t>& ksizes,
              std::vector<void*>& values, std::vector<hg_size_t>& vsizes) const {
         if(keys.size() != ksizes.size()
@@ -568,7 +569,7 @@ class client {
         || keys.size() != vsizes.size()) {
             throw std::length_error("Provided vectors should have the same size");
         }
-        return get(db, keys.size(), keys.data(),  ksizes.data(), values.data(), vsizes.data());
+        return get_multi(db, keys.size(), keys.data(),  ksizes.data(), values.data(), vsizes.data());
     }
 
     /**
@@ -583,7 +584,7 @@ class client {
      * @param values Vector of values.
      */
     template<typename K, typename V>
-    inline bool get(const database& db,
+    inline bool get_multi(const database& db,
              const std::vector<K>& keys, std::vector<V>& values) const {
         if(keys.size() != values.size()) {
             throw std::length_error("Provided vectors should have the same size");
@@ -600,7 +601,7 @@ class client {
             vsizes.push_back(object_size(v));
             vdata.push_back(object_data(v));
         }
-        get(db, kdata, ksizes, vdata, vsizes);
+        get_multi(db, kdata, ksizes, vdata, vsizes);
         for(unsigned i=0; i < values.size(); i++) {
             object_resize(values[i], vsizes[i]);
         }
@@ -621,7 +622,7 @@ class client {
      * @param vend End iterator for values.
      */
     template<typename IK, typename IV>
-    inline bool get(const database& db,
+    inline bool get_multi(const database& db,
              const IK& kbegin, const IK& kend,
              const IV& vbegin, const IV& vend) const {
         hg_size_t count = std::distance(kbegin, kend);
@@ -640,7 +641,7 @@ class client {
             vsizes.push_back(object_size(*it));
             vdata.push_back(object_data(*it));
         }
-        return get(db, kdata, ksizes, vdata, vsizes);
+        return get_multi(db, kdata, ksizes, vdata, vsizes);
     }
 
     /**
@@ -656,17 +657,17 @@ class client {
      * @return the resulting std::vector of values.
      */
     template<typename K, typename V>
-    inline std::vector<V> get(
+    inline std::vector<V> get_multi(
             const database& db,
             const std::vector<K>& keys) {
         hg_size_t num = keys.size();
         std::vector<hg_size_t> vsizes(num);
-        length(db, keys, vsizes);
+        length_multi(db, keys, vsizes);
         std::vector<V> values(num);
         for(unsigned i=0 ; i < num; i++) {
             object_resize(values[i], vsizes[i]);
         }
-        get(db, keys, values);
+        get_multi(db, keys, values);
         return values;
     }
 
@@ -1318,6 +1319,14 @@ class database {
     }
 
     /**
+     * @brief @see client::put_multi.
+     */
+    template<typename ... T>
+    void put_multi(T&& ... args) const {
+        m_ph.m_client->put_multi(*this, std::forward<T>(args)...);
+    }
+
+    /**
      * @brief @see client::length.
      */
     template<typename ... T>
@@ -1326,11 +1335,27 @@ class database {
     }
 
     /**
+     * @brief @see client::length_multi.
+     */
+    template<typename ... T>
+    decltype(auto) length_multi(T&& ... args) const {
+        return m_ph.m_client->length_multi(*this, std::forward<T>(args)...);
+    }
+
+    /**
      * @brief @see client::get.
      */
     template<typename ... T>
     decltype(auto) get(T&& ... args) const {
         return m_ph.m_client->get(*this, std::forward<T>(args)...);
+    }
+
+    /**
+     * @brief @see client::get_multi.
+     */
+    template<typename ... T>
+    decltype(auto) get_multi(T&& ... args) const {
+        return m_ph.m_client->get_multi(*this, std::forward<T>(args)...);
     }
 
     /**
@@ -1426,7 +1451,7 @@ inline void client::put(const database& db,
     _CHECK_RET(ret);
 }
 
-inline void client::put(const database& db,
+inline void client::put_multi(const database& db,
         hg_size_t count, const void* const* keys, const hg_size_t* ksizes,
         const void* const* values, const hg_size_t *vsizes) const {
     int ret = sdskv_put_multi(db.m_ph.m_ph, db.m_db_id,
@@ -1450,7 +1475,7 @@ inline bool client::exists(const database& db, const void* key, hg_size_t ksize)
     return flag;
 }
 
-inline bool client::length(const database& db,
+inline bool client::length_multi(const database& db,
         hg_size_t num, const void* const* keys,
         const hg_size_t* ksizes, hg_size_t* vsizes) const {
     int ret = sdskv_length_multi(db.m_ph.m_ph, db.m_db_id,
@@ -1468,7 +1493,7 @@ inline bool client::get(const database& db,
     return true;
 }
 
-inline bool client::get(const database& db,
+inline bool client::get_multi(const database& db,
         hg_size_t count, const void* const* keys, const hg_size_t* ksizes,
         void** values, hg_size_t *vsizes) const {
     int ret = sdskv_get_multi(db.m_ph.m_ph, db.m_db_id,

@@ -241,10 +241,9 @@ class PutMultiBenchmark : public PutBenchmark {
                 m_vsizes.resize(count);
                 m_vptrs.resize(count);
             }
-            db.put(m_kptrs, m_ksizes, m_vptrs, m_vsizes);
+            db.put_multi(m_kptrs, m_ksizes, m_vptrs, m_vsizes);
             remaining -= count;
         }
-        db.put(m_keys, m_vals);
     }
 
     virtual void teardown() override {
@@ -386,7 +385,7 @@ class GetMultiBenchmark : public GetBenchmark {
                 m_vsizes.resize(count);
                 m_vptrs.resize(count);
             }
-            db.get(m_kptrs, m_ksizes, m_vptrs, m_vsizes);
+            db.get_multi(m_kptrs, m_ksizes, m_vptrs, m_vsizes);
             if(!m_reuse_buffer)
                 k += count;
             j += count;
@@ -468,7 +467,7 @@ class LengthMultiBenchmark : public LengthBenchmark {
                 m_ksizes[i] = m_keys[i+j].size();
                 m_kptrs[i] = (const void*)m_keys[i+j].data();
             }
-            db.length(count, m_kptrs.data(), m_ksizes.data(), m_vsizes.data()+k);
+            db.length_multi(count, m_kptrs.data(), m_ksizes.data(), m_vsizes.data()+k);
             remaining -= count;
             j += count;
             if(!m_reuse_buffer)
