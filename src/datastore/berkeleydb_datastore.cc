@@ -303,10 +303,10 @@ std::vector<data_slice> BerkeleyDBDataStore::vlist_keys(
 	/* SET_RANGE will return the smallest key greater than or equal to the
 	 * requested key, but we want strictly greater than */
     int c = 0;
-	if (k != start) {
+	if(k != start && k.size() >= prefix.size()) {
         c = std::memcmp(prefix.data(), k.data(), prefix.size());
         if(c == 0) {
-            keys.push_back(std::move(k));
+            keys.push_back(k);
         }
     }
     while (keys.size() < count && c >= 0) {
@@ -316,7 +316,7 @@ std::vector<data_slice> BerkeleyDBDataStore::vlist_keys(
         data_slice k((char*)key.get_data(), ((char*)key.get_data())+key.get_size());
         c = std::memcmp(prefix.data(), k.data(), prefix.size());
         if(c == 0) {
-            keys.push_back(std::move(k));
+            keys.push_back(k);
         }
     }
     cursorp->close();
@@ -358,7 +358,7 @@ std::vector<std::pair<data_slice,data_slice>> BerkeleyDBDataStore::vlist_keyvals
 	if (k != start) {
         c = std::memcmp(prefix.data(), k.data(), prefix.size());
         if(c == 0) {
-            result.push_back(std::make_pair(std::move(k),std::move(v)));
+            result.push_back(std::make_pair(k,v));
         }
     }
     while (result.size() < count && c >= 0) {
@@ -370,7 +370,7 @@ std::vector<std::pair<data_slice,data_slice>> BerkeleyDBDataStore::vlist_keyvals
 
         c = std::memcmp(prefix.data(), k.data(), prefix.size());
         if(c == 0) {
-            result.push_back(std::make_pair(std::move(k), std::move(v)));
+            result.push_back(std::make_pair(k, v));
         }
     }
     cursorp->close();
