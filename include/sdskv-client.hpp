@@ -185,6 +185,16 @@ class client {
     }
 
     /**
+     * @brief Equivalent of sdskv_client_get_poolset_usage.
+     *
+     * @param usage Pointer to an sdskv_poolset_usage_t structure.
+     */
+    void get_poolset_usage(sdskv_poolset_usage_t* usage) const {
+        int ret = sdskv_client_get_poolset_usage(m_client, usage);
+        _CHECK_RET(ret);
+    }
+
+    /**
      * @brief Open a database held by a given provider.
      *
      * @param ph Provider handle.

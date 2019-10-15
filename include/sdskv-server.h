@@ -71,6 +71,17 @@ int sdskv_provider_configure_bulk_poolset(
         hg_size_t size_multiple);
 
 /**
+ * @brief Get statistics on the poolset usage.
+ *
+ * @param[in] provider SDSKV provider.
+ * @param[out] usage Pointer to usage structure.
+ *
+ * @return SDSKV_SUCCESS or error code defined in sdskv-common.h
+ */
+int sdskv_provider_get_poolset_usage(
+        sdskv_provider_t provider,
+        sdskv_poolset_usage_t* usage);
+/**
  * @brief Deregister the provider's RPCs and destroys the provider.
  *
  * @param provider Provider to destroy.

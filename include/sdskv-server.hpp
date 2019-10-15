@@ -107,6 +107,16 @@ class provider {
     }
 
     /**
+     * @brief Equivalent of sdskv_provider_get_poolset_usage.
+     *
+     * @param usage Pointer to an sdskv_poolset_usage_t structure.
+     */
+    void get_poolset_usage(sdskv_poolset_usage_t* usage) const {
+        int ret = sdskv_provider_get_poolset_usage(m_provider, usage);
+        _CHECK_RET(ret);
+    }
+
+    /**
      * @brief Add a comparison function.
      *
      * @param name Name for the comparison function.

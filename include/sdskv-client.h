@@ -50,6 +50,18 @@ int sdskv_client_configure_bulk_poolset(
         hg_size_t size_multiple);
 
 /**
+ * @brief Get the usage of the poolset by the client.
+ *
+ * @param client SDSKV client.
+ * @param usage Poolset usage.
+ *
+ * @return SDSKV_SUCCESS or error code defined in sdskv-common.h
+ */
+int sdskv_client_get_poolset_usage(
+        sdskv_client_t client,
+        sdskv_poolset_usage_t* usage);
+
+/**
  * @brief Finalizes a SDSKV client.
  *
  * @param[in] client SDSKV client to finalize

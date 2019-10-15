@@ -37,6 +37,8 @@ struct sdskv_client {
 
     /* poolset to reuse bulk handles */
     margo_bulk_poolset_t poolset;
+    ABT_mutex poolset_stats_mtx;
+    sdskv_poolset_usage_t poolset_usage;
 };
 
 struct sdskv_provider_handle {
@@ -194,6 +196,21 @@ int sdskv_client_configure_bulk_poolset(
             client->mid, npools, nbufs, first_size, size_multiple, HG_BULK_READWRITE,
             &(client->poolset));
     if(ret != 0) return SDSKV_ERR_POOLSET;
+    ABT_mutex_create(&client->poolset_stats_mtx);
+    return SDSKV_SUCCESS;
+}
+
+int sdskv_client_get_poolset_usage(
+        sdskv_client_t client,
+        sdskv_poolset_usage_t* usage)
+{
+    if(client->poolset == NULL) {
+        memset(usage, 0, sizeof(*usage));
+        return SDSKV_SUCCESS;
+    }
+    ABT_mutex_spinlock(client->poolset_stats_mtx);
+    *usage = client->poolset_usage;
+    ABT_mutex_unlock(client->poolset_stats_mtx);
     return SDSKV_SUCCESS;
 }
 
@@ -204,8 +221,10 @@ int sdskv_client_finalize(sdskv_client_t client)
                 "[SDSKV] Warning: %d provider handles not released before sdskv_client_finalize was called\n",
                 client->num_provider_handles);
     }
-    if(client->poolset)
+    if(client->poolset) {
         margo_bulk_poolset_destroy(client->poolset);
+        ABT_mutex_free(&client->poolset_stats_mtx);
+    }
     free(client);
     return SDSKV_SUCCESS;
 }
@@ -1874,6 +1893,9 @@ fallback_to_margo_bulk_create:
         for(i=0; i < count; i++) total_size += sizes[i];
         hg_return_t ret = margo_bulk_poolset_tryget(client->poolset, total_size, 1, handle);
         if(ret == -1 || *handle == HG_BULK_NULL) {
+            ABT_mutex_spinlock(client->poolset_stats_mtx);
+            client->poolset_usage.cache_miss += 1;
+            ABT_mutex_unlock(client->poolset_stats_mtx);
             goto fallback_to_margo_bulk_create;
         }
         if(flag == HG_BULK_READ_ONLY || HG_BULK_READWRITE) {
@@ -1887,6 +1909,10 @@ fallback_to_margo_bulk_create:
                 buf = ((char*)buf) + sizes[i];
             }
         }
+        ABT_mutex_spinlock(client->poolset_stats_mtx);
+        client->poolset_usage.cache_hits += 1;
+        client->poolset_usage.bulks_in_use += 1;
+        ABT_mutex_unlock(client->poolset_stats_mtx);
         return HG_SUCCESS;
     }
 }
@@ -1932,7 +1958,11 @@ static hg_return_t destroy_bulk(
     if(!client->poolset || from_poolset == 0)
         return margo_bulk_free(handle);
     else {
+        ABT_mutex_spinlock(client->poolset_stats_mtx);
+        client->poolset_usage.bulks_in_use -= 1;
+        ABT_mutex_unlock(client->poolset_stats_mtx);
         if(margo_bulk_poolset_release(client->poolset, handle) != 0)
-        return HG_NOMEM_ERROR;
+            return HG_NOMEM_ERROR;
     }
+    return HG_SUCCESS;
 }

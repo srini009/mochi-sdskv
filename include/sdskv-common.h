@@ -18,6 +18,12 @@ typedef enum sdskv_db_type_t
 typedef uint64_t sdskv_database_id_t;
 #define SDSKV_DATABASE_ID_INVALID 0
 
+typedef struct sdskv_poolset_usage_t {
+    uint64_t bulks_in_use;  // number of bulk handles currently out of the poolset
+    uint64_t cache_hits;    // number of times a bulk handle was succesfully obtained from the poolset
+    uint64_t cache_miss;    // number of times the provider/client had to fallback to creating a bulk
+} sdskv_poolset_usage_t;
+
 #define SDSKV_KEEP_ORIGINAL    0 /* for migration operations, keep original */
 #define SDSKV_REMOVE_ORIGINAL  1 /* for migration operations, remove the origin after migrating */
 
