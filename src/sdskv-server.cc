@@ -64,6 +64,9 @@ struct sdskv_server_context_t
     hg_id_t sdskv_migrate_database_id;
 
     margo_bulk_poolset_t poolset = nullptr;
+    /* poolset statistics */
+    ABT_mutex poolset_stats_mtx = ABT_MUTEX_NULL;
+    sdskv_poolset_usage_t poolset_usage = { 0, 0, 0 };
 };
 
 template<typename F>
@@ -353,6 +356,21 @@ extern "C" int sdskv_provider_configure_bulk_poolset(
             provider->mid, npools, nbufs, first_size, size_multiple, HG_BULK_READWRITE,
             &(provider->poolset));
     if(ret != 0) return SDSKV_ERR_POOLSET;
+    ABT_mutex_create(&provider->poolset_stats_mtx);
+    return SDSKV_SUCCESS;
+}
+
+extern "C" int sdskv_provider_get_poolset_usage(
+        sdskv_provider_t provider,
+        sdskv_poolset_usage_t* usage)
+{
+    if(provider->poolset == nullptr) {
+        memset(usage, 0, sizeof(*usage));
+        return SDSKV_SUCCESS;
+    }
+    ABT_mutex_spinlock(provider->poolset_stats_mtx);
+    *usage = provider->poolset_usage;
+    ABT_mutex_unlock(provider->poolset_stats_mtx);
     return SDSKV_SUCCESS;
 }
 
@@ -2440,6 +2458,11 @@ static void sdskv_server_finalize_cb(void *data)
 
     ABT_rwlock_free(&(provider->lock));
 
+    if(provider->poolset) {
+        margo_bulk_poolset_destroy(provider->poolset);
+        ABT_mutex_free(&provider->poolset_stats_mtx);
+    }
+
     delete provider;
 
     return;
@@ -2577,6 +2600,10 @@ extern "C" int sdskv_provider_set_abtio_instance(
     return SDSKV_SUCCESS;
 }
 
+    ABT_mutex poolset_stats_mtx = ABT_MUTEX_NULL;
+    uint64_t poolset_in_use = 0; // number of bulk handles currently in use
+    uint64_t poolset_hits   = 0; // number of cache hits
+    uint64_t poolset_miss   = 0; // number of cache misses
 static hg_return_t allocate_buffer_and_bulk(
         sdskv_provider_t provider,
         hg_size_t size,
@@ -2599,7 +2626,12 @@ fallback_to_creating_bulk:
     } else {
         *use_poolset = true;
         int ret = margo_bulk_poolset_tryget(provider->poolset, size, 1, bulk);
-        if(ret == -1 || *bulk == HG_BULK_NULL) goto fallback_to_creating_bulk;
+        if(ret == -1 || *bulk == HG_BULK_NULL) {
+            ABT_mutex_spinlock(provider->poolset_stats_mtx);
+            provider->poolset_usage.cache_miss += 1;
+            ABT_mutex_unlock(provider->poolset_stats_mtx);
+            goto fallback_to_creating_bulk;
+        }
         void* bulk_buf = NULL;
         hg_size_t bulk_buf_size = 0;
         hg_uint32_t actual_count = 0;
@@ -2607,6 +2639,10 @@ fallback_to_creating_bulk:
                 1, &bulk_buf, &bulk_buf_size, &actual_count);
         if(hret != HG_SUCCESS) return hret;
         *buffer = (char*)bulk_buf;
+        ABT_mutex_spinlock(provider->poolset_stats_mtx);
+        provider->poolset_usage.cache_hits += 1;
+        provider->poolset_usage.bulks_in_use += 1;
+        ABT_mutex_unlock(provider->poolset_stats_mtx);
     }
     return HG_SUCCESS;
 }
@@ -2624,6 +2660,9 @@ static hg_return_t free_buffer_and_bulk(
     } else {
         if(margo_bulk_poolset_release(provider->poolset, bulk) != 0)
             return HG_NOMEM_ERROR;
+        ABT_mutex_spinlock(provider->poolset_stats_mtx);
+        provider->poolset_usage.bulks_in_use -= 1;
+        ABT_mutex_unlock(provider->poolset_stats_mtx);
     }
     return HG_SUCCESS;
 }

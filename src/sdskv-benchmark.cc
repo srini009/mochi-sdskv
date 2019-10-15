@@ -736,6 +736,12 @@ int main(int argc, char** argv) {
     return 0;
 }
 
+static sdskv_poolset_usage_t server_poolset_usage;
+static void get_server_poolset_usage(void* ctx) {
+    sdskv::provider* provider = static_cast<sdskv::provider*>(ctx);
+    provider->get_poolset_usage(&server_poolset_usage);
+}
+
 static void run_server(MPI_Comm comm, Json::Value& config) {
     // initialize Margo
     margo_instance_id mid = MARGO_INSTANCE_NULL;
@@ -779,10 +785,14 @@ static void run_server(MPI_Comm comm, Json::Value& config) {
         .db_no_overwrite = 0
     };
     provider->attach_database(db_config);
+
+    margo_push_finalize_callback(mid, get_server_poolset_usage, provider);
     // notify clients that the database is ready
     MPI_Barrier(MPI_COMM_WORLD);
     // wait for finalize
     margo_wait_for_finalize(mid);
+    // send poolset usage to client 0
+    MPI_Send(&server_poolset_usage, sizeof(server_poolset_usage), MPI_BYTE, 1, 0, MPI_COMM_WORLD);
 }
 
 static void run_client(MPI_Comm comm, Json::Value& config) {
@@ -903,6 +913,28 @@ static void run_client(MPI_Comm comm, Json::Value& config) {
         // shutdown server and finalize margo
         if(rank == 0)
             margo_shutdown_remote_instance(mid, server_addr);
+        // collect poolset usage
+        sdskv_poolset_usage_t usage;
+        std::vector<sdskv_poolset_usage_t> usages;
+        client.get_poolset_usage(&usage);
+        if(rank == 0) usages.resize(num_clients);
+        MPI_Gather(&usage, sizeof(usage), MPI_BYTE,
+               usages.data(), sizeof(usage), MPI_BYTE, 0, comm);
+        if(rank == 0) {
+            std::cout << "##############################################" << std::endl;
+            std::cout << "Poolset usage" << std::endl;
+            unsigned int c = 0;
+            for(const auto& u : usages) {
+                std::cout << "Client " << c << " : "
+                    << u.cache_hits << " hits, "
+                    << u.cache_miss << " miss" << std::endl;
+            }
+            sdskv_poolset_usage_t server_usage;
+            MPI_Recv(&server_usage, sizeof(server_usage), MPI_BYTE, 0, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+            std::cout << "Server : "
+                << server_usage.cache_hits << " hits, "
+                << server_usage.cache_miss << " miss" << std::endl;
+        }
     }
     margo_addr_free(mid, server_addr);
     margo_finalize(mid);
