@@ -1232,6 +1232,8 @@ static void sdskv_bulk_get_ult(hg_handle_t handle)
     bulk_get_in_t in;
     bulk_get_out_t out;
     hg_bulk_t bulk_handle;
+    char* buffer = NULL;
+    bool use_poolset = true;
 
     margo_instance_id mid = margo_hg_handle_get_instance(handle);
     assert(mid);
@@ -1269,28 +1271,8 @@ static void sdskv_bulk_get_ult(hg_handle_t handle)
     
     data_slice kdata(in.key.data, in.key.data+in.key.size);
 
-    data_slice vdata(in.vsize);
-    auto r = db->get(kdata, vdata);
-
-    if(r != SDSKV_SUCCESS) {
-        out.vsize = vdata.size();
-        out.ret = r;
-        margo_respond(handle, &out);
-        margo_free_input(handle, &in);
-        margo_destroy(handle);
-        return;
-    }
-
-    hg_size_t size = vdata.size();
-    if(size > 0) {
-
-        // NOTE: in the process of trying to use a pre-prinned buffer,
-        // we lost the possible to just register the vdata's pointer directly,
-        // which means we now always make a memcpy.
-        // We might want to change that in the future if necessary.
-        char* buffer;
-        bool use_poolset;
-        hret = allocate_buffer_and_bulk(svr_ctx, size, HG_BULK_READ_ONLY,
+    if(in.vsize) {
+        hret = allocate_buffer_and_bulk(svr_ctx, in.vsize, HG_BULK_READ_ONLY,
                 &buffer, &bulk_handle, &use_poolset);
         if(hret != HG_SUCCESS) {
             out.vsize = 0;
@@ -1300,12 +1282,26 @@ static void sdskv_bulk_get_ult(hg_handle_t handle)
             margo_destroy(handle);
             return;
         }
+    }
 
-        memcpy(buffer, vdata.data(), size);
+    data_slice vdata(buffer, in.vsize);
 
+    auto r = db->get(kdata, vdata);
+
+    if(r != SDSKV_SUCCESS) {
+        out.vsize = vdata.size();
+        out.ret = r;
+        margo_respond(handle, &out);
+        margo_free_input(handle, &in);
+        free_buffer_and_bulk(svr_ctx, buffer, bulk_handle, use_poolset);
+        margo_destroy(handle);
+        return;
+    }
+
+    hg_size_t size = vdata.size();
+    if(size > 0) {
         hret = margo_bulk_transfer(mid, HG_BULK_PUSH, info->addr, in.handle, 0,
                 bulk_handle, 0, size);
-
         if(hret != HG_SUCCESS) {
             out.vsize = 0;
             out.ret = SDSKV_ERR_MERCURY;
@@ -1315,8 +1311,6 @@ static void sdskv_bulk_get_ult(hg_handle_t handle)
             margo_destroy(handle);
             return;
         }
-
-        free_buffer_and_bulk(svr_ctx, buffer, bulk_handle, use_poolset);
     }
 
     out.vsize = size;
@@ -1324,6 +1318,7 @@ static void sdskv_bulk_get_ult(hg_handle_t handle)
 
     margo_respond(handle, &out);
     margo_free_input(handle, &in);
+    free_buffer_and_bulk(svr_ctx, buffer, bulk_handle, use_poolset);
     margo_destroy(handle);
 
     return;
