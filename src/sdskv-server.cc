@@ -907,20 +907,18 @@ static void sdskv_get_ult(hg_handle_t handle)
     ABT_rwlock_unlock(svr_ctx->lock);
     
     data_slice kdata(in.key.data, in.key.data+in.key.size);
-    data_slice vdata;
+    data_slice vdata(in.vsize);
 
-    if(db->get(kdata, vdata)) {
-        if(vdata.size() <= in.vsize) {
-            out.vsize = vdata.size();
-            out.value.size = vdata.size();
-            out.value.data = vdata.data();
-            out.ret = SDSKV_SUCCESS;
-        } else {
-            out.vsize = vdata.size();
-            out.ret = SDSKV_ERR_SIZE;
-        }
+    int ret = db->get(kdata, vdata);
+
+    if(ret == SDSKV_SUCCESS) {
+        out.vsize = vdata.size();
+        out.value.size = vdata.size();
+        out.value.data = vdata.data();
+        out.ret = SDSKV_SUCCESS;
     } else {
-        out.ret   = SDSKV_ERR_UNKNOWN_KEY;
+        out.vsize = vdata.size();
+        out.ret = ret;
     }
 
     margo_free_input(handle, &in);
@@ -1019,7 +1017,7 @@ static void sdskv_get_multi_ult(hg_handle_t handle)
         data_slice kdata(packed_keys, packed_keys+key_sizes[i]);
         data_slice vdata;
         size_t client_allocated_value_size = val_sizes[i];
-        if(db->get(kdata, vdata)) {
+        if(db->get(kdata, vdata) == SDSKV_SUCCESS) {
             size_t old_vsize = val_sizes[i];
             if(vdata.size() > val_sizes[i]) {
                 val_sizes[i] = 0;
@@ -1116,7 +1114,7 @@ static void sdskv_length_multi_ult(hg_handle_t handle)
     for(unsigned i=0; i < in.num_keys; i++) {
         data_slice kdata(packed_keys, packed_keys+key_sizes[i]);
         data_slice vdata;
-        if(db->get(kdata, vdata)) {
+        if(db->get(kdata, vdata) == SDSKV_SUCCESS) {
             local_vals_size_buffer[i] = vdata.size();
         } else {
             local_vals_size_buffer[i] = 0;
@@ -1271,21 +1269,12 @@ static void sdskv_bulk_get_ult(hg_handle_t handle)
     
     data_slice kdata(in.key.data, in.key.data+in.key.size);
 
-    data_slice vdata;
-    auto b = db->get(kdata, vdata);
+    data_slice vdata(in.vsize);
+    auto r = db->get(kdata, vdata);
 
-    if(!b) {
-        out.vsize = 0;
-        out.ret = SDSKV_ERR_UNKNOWN_KEY;
-        margo_respond(handle, &out);
-        margo_free_input(handle, &in);
-        margo_destroy(handle);
-        return;
-    }
-
-    if(vdata.size() > in.vsize) {
+    if(r != SDSKV_SUCCESS) {
         out.vsize = vdata.size();
-        out.ret = SDSKV_ERR_SIZE;
+        out.ret = r;
         margo_respond(handle, &out);
         margo_free_input(handle, &in);
         margo_destroy(handle);

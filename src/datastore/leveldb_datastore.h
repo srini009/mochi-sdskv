@@ -43,8 +43,7 @@ class LevelDBDataStore : public AbstractDataStore {
         virtual ~LevelDBDataStore();
         virtual bool openDatabase(const std::string& db_name, const std::string& path) override;
         virtual int put(const void* key, hg_size_t ksize, const void* kdata, hg_size_t dsize) override;
-        virtual bool get(const data_slice &key, data_slice &data) override;
-        virtual bool get(const data_slice &key, std::vector<data_slice> &data) override;
+        virtual int get(const data_slice &key, data_slice &data) override;
         virtual bool exists(const void* key, hg_size_t ksize) const override;
         virtual bool erase(const data_slice &key) override;
         virtual void set_in_memory(bool enable) override; // not supported, a no-op

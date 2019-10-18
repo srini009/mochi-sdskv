@@ -76,22 +76,24 @@ class MapDataStore : public AbstractDataStore {
             }
         }
 
-        virtual bool get(const data_slice &key, data_slice &data) override {
+        virtual int get(const data_slice &key, data_slice &data) override {
             ABT_rwlock_rdlock(_map_lock);
             auto it = _map.find(key);
+            int ret = SDSKV_SUCCESS;
             if(it == _map.end()) {
-                ABT_rwlock_unlock(_map_lock);
-                return false;
+                ret = SDSKV_ERR_UNKNOWN_KEY;
+            } else {
+                if(data.size() > it->second.size()) {
+                    memcpy(data.data(), it->second.data(), it->second.size());
+                    data.resize(it->second.size());
+                } else if(data.size() == 0) {
+                    data = it->second;
+                } else {
+                    ret = SDSKV_ERR_SIZE;
+                }
             }
-            data = it->second;
             ABT_rwlock_unlock(_map_lock);
-            return true;
-        }
-
-        virtual bool get(const data_slice &key, std::vector<data_slice>& values) override {
-            values.clear();
-            values.resize(1);
-            return get(key, values[0]);
+            return ret;
         }
 
         virtual bool length(const data_slice &key, size_t& result) override {
