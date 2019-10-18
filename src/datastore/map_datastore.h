@@ -65,14 +65,13 @@ class MapDataStore : public AbstractDataStore {
         }
 
         virtual int put(const void* key, hg_size_t ksize, const void* value, hg_size_t vsize) override {
+            data_slice k((const char*)key, ((const char*)key)+ksize);
             if(vsize != 0) {
-                data_slice k((const char*)key, ((const char*)key)+ksize);
                 data_slice v((const char*)value, ((const char*)value)+vsize);
                 return put(k, v);
             } else {
-                data_slice k((const char*)key, ((const char*)key)+ksize);
                 data_slice v;
-                return put(std::move(k), std::move(v));
+                return put(k, v);
             }
         }
 
@@ -83,7 +82,7 @@ class MapDataStore : public AbstractDataStore {
             if(it == _map.end()) {
                 ret = SDSKV_ERR_UNKNOWN_KEY;
             } else {
-                if(data.size() > it->second.size()) {
+                if(data.size() >= it->second.size()) {
                     memcpy(data.data(), it->second.data(), it->second.size());
                     data.resize(it->second.size());
                 } else if(data.size() == 0) {
