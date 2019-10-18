@@ -9,6 +9,7 @@
 #ifdef USE_REMI
 #include "remi/remi-common.h"
 #endif
+#include "sdskv-common.h"
 
 #include <vector>
 
@@ -38,11 +39,18 @@ class AbstractDataStore {
             }
             return ret;
         }
-        virtual bool get(const data_slice &key, data_slice &data)=0;
-        virtual bool get(const data_slice &key, std::vector<data_slice> &data)=0;
+        virtual int get(const data_slice &key, data_slice &data)=0;
+        virtual int get(const void* kdata, hg_size_t ksize, void* vdata, hg_size_t *vsize) {
+            data_slice key((const char*)kdata, ksize);
+            data_slice val((const char*)vdata, *vsize);
+            int ret = get(key, val);
+            if(ret == SDSKV_SUCCESS)
+                *vsize = val.size();
+            return ret;
+        }
         virtual bool length(const data_slice &key, size_t& result) {
             data_slice value;
-            if(get(key, value)) {
+            if(get(key, value) == SDSKV_SUCCESS) {
                 result = value.size();
                 return true;
             }

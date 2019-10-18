@@ -103,38 +103,33 @@ bool LevelDBDataStore::exists(const void* key, hg_size_t ksize) const {
     return status.ok();
 }
 
-bool LevelDBDataStore::get(const data_slice &key, data_slice &data) {
+int LevelDBDataStore::get(const data_slice &key, data_slice &data) {
   leveldb::Status status;
-  bool success = false;
+  int ret = SDSKV_SUCCESS;
 
   //high_resolution_clock::time_point start = high_resolution_clock::now();
   std::string value;
   status = _dbm->Get(leveldb::ReadOptions(), toString(key), &value);
   if (status.ok()) {
-    data = fromString(value);
-    success = true;
+    if(data.size() == 0) {
+        data = fromString(value);
+    } else {
+        if(data.size() < value.size()) {
+            ret = SDSKV_ERR_SIZE;
+        } else {
+            memcpy(data.data(), value.data(), value.size());
+            data.resize(value.size());
+        }
+    }
   }
-  else if (!status.IsNotFound()) {
-    data = data_slice(0);
-    std::cerr << "LevelDBDataStore::get: LevelDB error on Get = " << status.ToString() << std::endl;
+  else if (status.IsNotFound()) {
+    ret = SDSKV_ERR_UNKNOWN_KEY;
+    data.resize(0);
   }
-//  uint64_t elapsed = duration_cast<microseconds>(high_resolution_clock::now()-start).count();
-//  std::cout << "LevelDBDataStore::get time = " << elapsed << " microseconds" << std::endl;
+  std::string k(key.data(), k.size());
+  std::cerr << "GET " << k << " status: " << status.ToString() << std::endl;
 
-  return success;
-};
-
-bool LevelDBDataStore::get(const data_slice &key, std::vector<data_slice> &data) {
-  bool success = false;
-
-  data.clear();
-  data_slice value;
-  if (get(key, value)) {
-    data.push_back(value);
-    success = true;
-  }
-  
-  return success;
+  return ret;
 };
 
 void LevelDBDataStore::set_in_memory(bool enable)

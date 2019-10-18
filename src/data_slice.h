@@ -110,6 +110,23 @@ class data_slice {
             return _size < other._size;
         }
     }
+
+    void resize(size_t newsize) {
+        if(_owns_data) {
+            if(newsize > _size) {
+                _data = (char*)realloc(_data, newsize);
+            }
+            _size = newsize;
+        } else {
+            if(newsize > _size) {
+                char* tmp = (char*)malloc(newsize);
+                memcpy(tmp, _data, _size);
+                _data = tmp;
+                _owns_data = true;
+            }
+            _size = newsize;
+        }
+    }
 };
 
 struct data_slice_hash {

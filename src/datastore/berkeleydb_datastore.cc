@@ -216,57 +216,44 @@ void BerkeleyDBDataStore::sync() {
     _dbm->sync(0);
 }
 
-// In the case where Duplicates::ALLOW, this will return the first
-// value found using key.
-bool BerkeleyDBDataStore::get(const data_slice &key, data_slice &data) {
+int BerkeleyDBDataStore::get(const data_slice &key, data_slice &data) {
   int status = 0;
   bool success = false;
 
+  bool usermem = (data.size() != 0);
+
   Dbt db_key((void*)key.data(), uint32_t(key.size()));
   db_key.set_ulen(uint32_t(key.size()));
-  Dbt db_data;
   db_key.set_flags(DB_DBT_USERMEM);
-  db_data.set_flags(DB_DBT_MALLOC);
+  Dbt db_data;
+  if(usermem) {
+    db_data.set_data((void*)data.data());
+    db_data.set_ulen(uint32_t(data.size()));
+    db_data.set_flags(DB_DBT_USERMEM);
+  } else {
+    db_data.set_flags(DB_DBT_MALLOC);
+  }
+
   status = _dbm->get(NULL, &db_key, &db_data, 0);
 
-  if (status != DB_NOTFOUND && status != DB_KEYEMPTY) {
-    data_slice slice(db_data.get_size());
-    if(db_data.get_size() == 0) {
-        data = data_slice(0);
-        free(db_data.get_data());
-    } else {
-        data = std::move(data_slice((const char*)db_data.get_data(), db_data.get_size(), true));
-    }
-    success = true;
+  if(status == DB_NOTFOUND || status == DB_KEYEMPTY) {
+    return SDSKV_ERR_UNKNOWN_KEY;
   }
-  else {
-    //std::cerr << "BerkeleyDBDataStore::get: BerkeleyDB error on Get = " << status << std::endl;
+
+  if(status == DB_BUFFER_SMALL) {
+    return SDSKV_ERR_SIZE;
+  }
+
+  if(!usermem) {
+      data = std::move(data_slice((const char*)db_data.get_data(), db_data.get_size(), true));
+  } else {
+      data.resize(db_data.get_size());
   }
   
-  if (success && _eraseOnGet) {
-    status = _dbm->del(NULL, &db_key, 0);
-    if (status != 0) {
-      success = false;
-      //std::cerr << "BerkeleyDBDataStore::get: BerkeleyDB error on delete (eraseOnGet) = " << status << std::endl;
-    }
+  if(_eraseOnGet) {
+    _dbm->del(NULL, &db_key, 0);
   }
-
-  return success;
-};
-
-// TODO: To return more than 1 value (when Duplicates::ALLOW), this code should
-// use the c_get interface.
-bool BerkeleyDBDataStore::get(const data_slice &key, std::vector<data_slice> &data) {
-  bool success = false;
-
-  data.clear();
-  data_slice value;
-  if (get(key, value)) {
-    data.push_back(value);
-    success = true;
-  }
-  
-  return success;
+  return SDSKV_SUCCESS;
 };
 
 void BerkeleyDBDataStore::set_in_memory(bool enable) {

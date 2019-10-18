@@ -35,8 +35,15 @@ class BerkeleyDBDataStore : public AbstractDataStore {
                                const hg_size_t* ksizes,
                                const void* const* values,
                                const hg_size_t* vsizes) override;
-        virtual bool get(const data_slice &key, data_slice &data) override;
-        virtual bool get(const data_slice &key, std::vector<data_slice> &data) override;
+        virtual int get(const void* kdata, hg_size_t ksize, void* vdata, hg_size_t *vsize) override {
+            data_slice key((const char*)kdata, ksize);
+            data_slice val((const char*)vdata, *vsize);
+            int ret = get(key, val);
+            if(ret == SDSKV_SUCCESS)
+                *vsize = val.size();
+            return ret;
+        }
+        virtual int get(const data_slice &key, data_slice &data) override;
         virtual bool exists(const void* key, hg_size_t ksize) const override;
         virtual bool erase(const data_slice &key) override;
         virtual void set_in_memory(bool enable) override; // enable/disable in-memory mode
