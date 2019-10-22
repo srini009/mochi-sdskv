@@ -1645,19 +1645,31 @@ static void sdskv_list_keys_ult(hg_handle_t handle)
         /* transfer the keys to the client */
         uint64_t remote_offset = 0;
         uint64_t local_offset  = 0;
+        std::vector<margo_request> requests;
+        requests.reserve(num_keys);
         for(unsigned i = 0; i < num_keys; i++) {
 
             if(true_ksizes[i] > 0) {
-                hret = margo_bulk_transfer(mid, HG_BULK_PUSH, origin_addr,
-                        in.keys_bulk_handle, remote_offset, keys_local_bulk, local_offset, true_ksizes[i]);
+                margo_request req;
+                hret = margo_bulk_itransfer(mid, HG_BULK_PUSH, origin_addr,
+                        in.keys_bulk_handle, remote_offset, keys_local_bulk,
+                        local_offset, true_ksizes[i], &req);
+                requests.push_back(req);
                 if(hret != HG_SUCCESS) {
                     std::cerr << "Error: SDSKV list_keys could not issue bulk transfer (keys_local_bulk)" << std::endl;
+                    for(auto& r : requests) {
+                        margo_wait(r);
+                    }
                     throw SDSKV_ERR_MERCURY;
                 }
             }
 
             remote_offset += remote_ksizes[i];
             local_offset  += true_ksizes[i];
+        }
+
+        for(auto& r : requests) {
+            margo_wait(r);
         }
 
         out.ret = SDSKV_SUCCESS;
