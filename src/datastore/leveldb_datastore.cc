@@ -109,7 +109,8 @@ int LevelDBDataStore::get(const data_slice &key, data_slice &data) {
 
   //high_resolution_clock::time_point start = high_resolution_clock::now();
   std::string value;
-  status = _dbm->Get(leveldb::ReadOptions(), toString(key), &value);
+  leveldb::Slice key_slice(key.data(), key.size());
+  status = _dbm->Get(leveldb::ReadOptions(), key_slice, &value);
   if (status.ok()) {
     if(data.size() == 0) {
         data = fromString(value);
@@ -126,19 +127,19 @@ int LevelDBDataStore::get(const data_slice &key, data_slice &data) {
     ret = SDSKV_ERR_UNKNOWN_KEY;
     data.resize(0);
   }
-  std::string k(key.data(), k.size());
-  std::cerr << "GET " << k << " status: " << status.ToString() << std::endl;
-
   return ret;
 };
 
 void LevelDBDataStore::set_in_memory(bool enable)
 {};
 
-std::vector<data_slice> LevelDBDataStore::vlist_keys(
-        const data_slice &start, hg_size_t count, const data_slice &prefix) const
+void LevelDBDataStore::vlist_keys(
+        uint64_t max_count,
+        const data_slice &start,
+        const data_slice &prefix, std::vector<data_slice>& result) const
 {
-    std::vector<data_slice> keys;
+    bool usermem = result.size() != 0;
+    auto count = usermem ? result.size() : max_count;
 
     leveldb::Iterator *it = _dbm->NewIterator(leveldb::ReadOptions());
     leveldb::Slice start_slice(start.data(), start.size());
@@ -157,24 +158,42 @@ std::vector<data_slice> LevelDBDataStore::vlist_keys(
         it->SeekToFirst();
     }
     /* note: iterator initialized above, not in for loop */
-    for (; it->Valid() && keys.size() < count; it->Next() ) {
-        data_slice k(it->key().size());
-        memcpy(k.data(), it->key().data(), it->key().size() );
+    unsigned i = 0;
+    bool size_error = false;
+    for (; it->Valid() && i < count; it->Next() ) {
+        const auto& k = it->key();
         c = std::memcmp(prefix.data(), k.data(), prefix.size());
-        if(c == 0) {
-            keys.push_back(std::move(k));
+        if(c > 0) {
+            continue;
         } else if(c < 0) {
             break;
         }
+        if(usermem) {
+            if(k.size() > result[i].size() || size_error) {
+                size_error = true;
+            } else {
+                std::memcpy(result[i].data(), k.data(), k.size());
+            std::cerr << "Key " << std::string(k.data(), k.size()) << std::endl;
+            }
+            result[i].resize(k.size());
+        } else {
+            result.push_back(data_slice(k.data(), k.size()));
+        }
+        ++i;
     }
     delete it;
-    return keys;
+    result.resize(i);
+    if(size_error) throw SDSKV_ERR_SIZE;
 }
 
-std::vector<std::pair<data_slice,data_slice>> LevelDBDataStore::vlist_keyvals(
-        const data_slice &start, hg_size_t count, const data_slice &prefix) const
+void LevelDBDataStore::vlist_keyvals(
+        uint64_t max_count,
+        const data_slice &start,
+        const data_slice &prefix,
+        std::vector<std::pair<data_slice,data_slice>>& result) const
 {
-    std::vector<std::pair<data_slice,data_slice>> result;
+    bool usermem = result.size() != 0;
+    auto count = usermem ? result.size() : max_count;
 
     leveldb::Iterator *it = _dbm->NewIterator(leveldb::ReadOptions());
     leveldb::Slice start_slice(start.data(), start.size());
@@ -192,38 +211,59 @@ std::vector<std::pair<data_slice,data_slice>> LevelDBDataStore::vlist_keyvals(
     } else {
         it->SeekToFirst();
     }
+    unsigned i = 0;
+    bool size_error = false;
     /* note: iterator initialized above, not in for loop */
-    for (; it->Valid() && result.size() < count; it->Next() ) {
-        data_slice k(it->key().size());
-        data_slice v(it->value().size());
-        memcpy(k.data(), it->key().data(), it->key().size());
-        memcpy(v.data(), it->value().data(), it->value().size());
-
+    for (; it->Valid() && i < count; it->Next() ) {
+        const auto& k = it->key();
+        const auto& v = it->value();
+        
         c = std::memcmp(prefix.data(), k.data(), prefix.size());
-        if(c == 0) {
-            result.push_back(std::make_pair(std::move(k), std::move(v)));
+        if(c > 0) {
+            continue;
         } else if(c < 0) {
             break;
         }
+        if(usermem) {
+            if(size_error
+            || k.size() > result[i].first.size() 
+            || v.size() > result[i].second.size()) {
+                size_error = true;
+            } else {
+                std::memcpy(result[i].first.data(), k.data(), k.size());
+                if(v.size()) std::memcpy(result[i].second.data(), v.data(), v.size());
+            }
+            result[i].first.resize(k.size());
+            result[i].second.resize(v.size());
+        } else {
+            result.push_back(
+                    std::make_pair(
+                        data_slice(k.data(), k.size()),
+                        data_slice(v.data(), v.size())
+                        )
+                    );
+        }
+        ++i;
     }
     delete it;
-    return result;
+    result.resize(i);
+    if(size_error) throw SDSKV_ERR_SIZE;
 }
 
-std::vector<data_slice> LevelDBDataStore::vlist_key_range(
-        const data_slice &lower_bound, const data_slice &upper_bound, hg_size_t max_keys) const {
-    std::vector<data_slice> result;
+void LevelDBDataStore::vlist_key_range(
+        const data_slice &lower_bound,
+        const data_slice &upper_bound,
+        std::vector<data_slice>& result) const {
     // TODO implement this function
     throw SDSKV_OP_NOT_IMPL;
-    return result;
 }
 
-std::vector<std::pair<data_slice,data_slice>> LevelDBDataStore::vlist_keyval_range(
-        const data_slice &lower_bound, const data_slice &upper_bound, hg_size_t max_keys) const {
-    std::vector<std::pair<data_slice,data_slice>> result;
+void LevelDBDataStore::vlist_keyval_range(
+        const data_slice &lower_bound,
+        const data_slice &upper_bound,
+        std::vector<std::pair<data_slice,data_slice>>& result) const {
     // TODO implement this function
     throw SDSKV_OP_NOT_IMPL;
-    return result;
 }
 
 #ifdef USE_REMI

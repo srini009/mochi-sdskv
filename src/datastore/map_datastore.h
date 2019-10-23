@@ -148,65 +148,110 @@ class MapDataStore : public AbstractDataStore {
 
     protected:
 
-        virtual std::vector<data_slice> vlist_keys(
-                const data_slice &start_key, hg_size_t count, const data_slice &prefix) const override {
+        virtual void vlist_keys(
+                uint64_t max_count,
+                const data_slice &start_key,
+                const data_slice &prefix,
+                std::vector<data_slice>& result) const override {
+            auto count = result.size();
+            bool usermem = count != 0;
+            if(!usermem) count = max_count;
             ABT_rwlock_rdlock(_map_lock);
-            std::vector<data_slice> result;
-            decltype(_map.begin()) it;
-            if(start_key.size() > 0) {
-                it = _map.upper_bound(start_key);
-            } else {
-                it = _map.begin();
-            }
-            while(result.size() < count && it != _map.end()) {
+            auto it = (start_key.size() > 0) ? _map.upper_bound(start_key) : _map.begin();
+            unsigned i=0;
+            bool size_error = false;
+            while(i < count && it != _map.end()) {
                 const auto& p = *it;
-                if(prefix.size() > p.first.size()) continue;
+                if(prefix.size() > p.first.size()) {
+                    ++it;
+                    continue;
+                }
                 int c = std::memcmp(prefix.data(), p.first.data(), prefix.size());
-                if(c == 0) {
+                if(c > 0) {
+                    ++it;
+                    continue;
+                } else if(c < 0) {
+                    break; // we have exceeded prefix
+                }
+                if(usermem) {
+                    auto& key_slice = result[i];
+                    if(key_slice.size() < p.first.size()) {
+                        size_error = true;
+                    } else {
+                        std::memcpy(key_slice.data(), p.first.data(), p.first.size());
+                    }
+                    key_slice.resize(p.first.size());
+                } else {
                     result.push_back(p.first);
-                } else if(c < 0) {
-                    break; // we have exceeded prefix
                 }
-                it++;
+                ++it;
+                ++i;
             }
+            result.resize(i);
             ABT_rwlock_unlock(_map_lock);
-            return result;
+            if(size_error) throw SDSKV_ERR_SIZE;
         }
 
-        virtual std::vector<std::pair<data_slice,data_slice>> vlist_keyvals(
-                const data_slice &start_key, hg_size_t count, const data_slice &prefix) const override {
+        virtual void vlist_keyvals(
+                uint64_t max_count,
+                const data_slice &start_key,
+                const data_slice &prefix,
+                std::vector<std::pair<data_slice,data_slice>>& result) const override {
+            auto count = result.size();
+            bool usermem = count != 0;
+            if(!usermem) count = max_count;
             ABT_rwlock_rdlock(_map_lock);
-            std::vector<std::pair<data_slice,data_slice>> result;
-            decltype(_map.begin()) it;
-            if(start_key.size() > 0) {
-                it = _map.upper_bound(start_key);
-            } else {
-                it = _map.begin();
-            }
-            while(result.size() < count && it != _map.end()) {
+            auto it = (start_key.size() > 0) ? _map.upper_bound(start_key) : _map.begin();
+            unsigned i = 0;
+            bool size_error = false;
+            while(i < count && it != _map.end()) {
                 const auto& p = *it;
-                if(prefix.size() > p.first.size()) continue;
+                if(prefix.size() > p.first.size()) {
+                    ++it;
+                    continue;
+                }
                 int c = std::memcmp(prefix.data(), p.first.data(), prefix.size());
-                if(c == 0) {
-                    result.push_back(p);
+                if(c > 0) {
+                    ++it;
+                    continue;
                 } else if(c < 0) {
                     break; // we have exceeded prefix
                 }
-                it++;
+                if(usermem) {
+                    auto& key_slice = result[i].first;
+                    auto& val_slice = result[i].second;
+                    if(key_slice.size() < p.first.size()
+                    || val_slice.size() < p.second.size()) {
+                        size_error = true;
+                    } else {
+                        std::memcpy(key_slice.data(), p.first.data(), p.first.size());
+                        if(p.second.size()) std::memcpy(val_slice.data(), p.second.data(), p.second.size());
+                    }
+                    key_slice.resize(p.first.size());
+                    val_slice.resize(p.second.size());
+                } else {
+                    result.push_back(p);
+                }
+                ++it;
+                ++i;
             }
             ABT_rwlock_unlock(_map_lock);
-            return result;
+            result.resize(i);
+            if(size_error) throw SDSKV_ERR_SIZE;
         }
 
-        virtual std::vector<data_slice> vlist_key_range(
-                const data_slice &lower_bound, const data_slice &upper_bound, hg_size_t max_keys) const override {
+        virtual void vlist_key_range(
+                const data_slice &lower_bound,
+                const data_slice &upper_bound,
+                std::vector<data_slice>& result) const override {
+            /*
             ABT_rwlock_rdlock(_map_lock);
-            std::vector<data_slice> result;
+            result.resize(0);
             decltype(_map.begin()) it, ub;
             // get the first element that goes immediately after lower_bound
             it = _map.upper_bound(lower_bound);
             if(it == _map.end()) {
-                return result;
+                return;
             }
             // get the element that goes immediately before upper bound
             ub = _map.lower_bound(upper_bound);
@@ -219,18 +264,22 @@ class MapDataStore : public AbstractDataStore {
                     break;
             }
             ABT_rwlock_unlock(_map_lock);
-            return result;
+            */
+            throw SDSKV_OP_NOT_IMPL;
         }
 
-        virtual std::vector<std::pair<data_slice,data_slice>> vlist_keyval_range(
-                const data_slice &lower_bound, const data_slice& upper_bound, hg_size_t max_keys) const override {
+        virtual void vlist_keyval_range(
+                const data_slice &lower_bound,
+                const data_slice& upper_bound,
+                std::vector<std::pair<data_slice,data_slice>>& result) const override {
+            /*
             ABT_rwlock_rdlock(_map_lock);
-            std::vector<std::pair<data_slice,data_slice>> result;
+            result.resize(0);
             decltype(_map.begin()) it, ub;
             // get the first element that goes immediately after lower_bound
             it = _map.upper_bound(lower_bound);
             if(it == _map.end()) {
-                return result;
+                return;
             }
             // get the element that goes immediately before upper bound
             ub = _map.lower_bound(upper_bound);
@@ -243,7 +292,8 @@ class MapDataStore : public AbstractDataStore {
                     break;
             }
             ABT_rwlock_unlock(_map_lock);
-            return result;
+            */
+            throw SDSKV_OP_NOT_IMPL;
         }
 
     private:
