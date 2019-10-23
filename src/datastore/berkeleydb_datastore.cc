@@ -260,10 +260,14 @@ void BerkeleyDBDataStore::set_in_memory(bool enable) {
   _in_memory = enable;
 };
 
-std::vector<data_slice> BerkeleyDBDataStore::vlist_keys(
-        const data_slice &start, hg_size_t count, const data_slice &prefix) const
+void BerkeleyDBDataStore::vlist_keys(
+        uint64_t max_count,
+        const data_slice &start,
+        const data_slice &prefix, std::vector<data_slice>& result) const
 {
-    std::vector<data_slice> keys;
+    bool usermem = result.size() != 0;
+    uint64_t count = usermem ? result.size() : max_count;
+
     Dbc * cursorp;
     Dbt key, data;
     int ret;
@@ -271,49 +275,79 @@ std::vector<data_slice> BerkeleyDBDataStore::vlist_keys(
 
     /* 'start' is like RADOS: not inclusive  */
     if (start.size()) {
-	    key.set_size(start.size());
-	    key.set_data((void *)start.data());
-	    ret = cursorp->get(&key, &data, DB_SET_RANGE);
-	    if (ret != 0) {
-	        cursorp->close();
-	        return keys;
-	    }
+        key.set_size(start.size());
+        key.set_data((void *)start.data());
+        ret = cursorp->get(&key, &data, DB_SET_RANGE);
+        if (ret != 0) {
+            cursorp->close();
+            result.resize(0);
+            return;
+        }
     } else {
         ret = cursorp->get(&key, &data, DB_FIRST);
         if (ret != 0) {
             cursorp->close();
-            return keys;
+            result.resize(0);
+            return;
         }
     }
 
-	data_slice k((char*)key.get_data(), ((char*)key.get_data())+key.get_size());
-	/* SET_RANGE will return the smallest key greater than or equal to the
-	 * requested key, but we want strictly greater than */
+    data_slice k((char*)key.get_data(), key.get_size());
+    /* SET_RANGE will return the smallest key greater than or equal to the
+     * requested key, but we want strictly greater than */
     int c = 0;
-	if(k != start && k.size() >= prefix.size()) {
+    bool size_error = false;
+    unsigned i = 0;
+    if(k != start && k.size() >= prefix.size()) {
         c = std::memcmp(prefix.data(), k.data(), prefix.size());
         if(c == 0) {
-            keys.push_back(k);
+            if(usermem) {
+                if(result[0].size() < k.size()) {
+                    size_error = true;
+                } else {
+                    std::memcpy(result[0].data(), k.data(), k.size());
+                }
+                result[0].resize(k.size());
+            } else {
+                result.push_back(k);
+            }
+            i += 1;
         }
     }
-    while (keys.size() < count && c >= 0) {
-	    ret = cursorp->get(&key, &data, DB_NEXT);
-	    if (ret !=0 ) break;
+    while (i < count && c >= 0) {
+        ret = cursorp->get(&key, &data, DB_NEXT);
+        if (ret !=0 ) break;
         
         data_slice k((char*)key.get_data(), ((char*)key.get_data())+key.get_size());
         c = std::memcmp(prefix.data(), k.data(), prefix.size());
         if(c == 0) {
-            keys.push_back(k);
+            if(usermem) {
+                if(size_error || result[i].size() < k.size()) {
+                    size_error = true;
+                } else {
+                    std::memcpy(result[i].data(), k.data(), k.size());
+                }
+                result[i].resize(k.size());
+            } else {
+                result.push_back(k);
+            }
+            i++;
         }
     }
+    result.resize(i);
     cursorp->close();
-    return keys;
+    if(size_error) throw SDSKV_ERR_SIZE;
 }
 
-std::vector<std::pair<data_slice,data_slice>> BerkeleyDBDataStore::vlist_keyvals(
-        const data_slice &start, hg_size_t count, const data_slice &prefix) const
+void BerkeleyDBDataStore::vlist_keyvals(
+        uint64_t max_count,
+        const data_slice &start,
+        const data_slice &prefix,
+        std::vector<std::pair<data_slice,data_slice>>& result) const
 {
-    std::vector<std::pair<data_slice,data_slice>> result;
+    bool usermem = result.size() != 0;
+    uint64_t count = usermem ? result.size() : max_count;
+
     Dbc * cursorp;
     Dbt key, data;
     int ret;
@@ -321,36 +355,117 @@ std::vector<std::pair<data_slice,data_slice>> BerkeleyDBDataStore::vlist_keyvals
 
     /* 'start' is like RADOS: not inclusive  */
     if (start.size()) {
-	    key.set_size(start.size());
-	    key.set_data((void *)start.data());
-	    ret = cursorp->get(&key, &data, DB_SET_RANGE);
-	    if (ret != 0) {
-	        cursorp->close();
-	        return result;
-	    }
+        key.set_size(start.size());
+        key.set_data((void *)start.data());
+        ret = cursorp->get(&key, &data, DB_SET_RANGE);
+        if (ret != 0) {
+            cursorp->close();
+            result.resize(0);
+            return;
+        }
     } else {
         ret = cursorp->get(&key, &data, DB_FIRST);
         if (ret != 0) {
             cursorp->close();
-            return result;
+            result.resize(0);
+            return;
         }
     }
 
-	data_slice k((char*)key.get_data(), ((char*)key.get_data())+key.get_size());
+    data_slice k((char*)key.get_data(), key.get_size());
+    data_slice v((char*)data.get_data(), data.get_size());
+    /* SET_RANGE will return the smallest key greater than or equal to the
+     * requested key, but we want strictly greater than */
+    int c = 0;
+    bool size_error = false;
+    unsigned i = 0;
+    if(k != start && k.size() >= prefix.size()) {
+        c = std::memcmp(prefix.data(), k.data(), prefix.size());
+        if(c == 0) {
+            if(usermem) {
+                if(result[0].first.size() < k.size()
+                || result[0].second.size() < v.size()) {
+                    size_error = true;
+                } else {
+                    std::memcpy(result[0].first.data(), k.data(), k.size());
+                    if(v.size()) std::memcpy(result[0].second.data(), v.data(), v.size());
+                }
+                result[0].first.resize(k.size());
+                result[0].second.resize(v.size());
+            } else {
+                result.push_back(std::make_pair(k, v));
+            }
+            i += 1;
+        }
+    }
+    while (i < count && c >= 0) {
+        ret = cursorp->get(&key, &data, DB_NEXT);
+        if (ret !=0 ) break;
+        
+        data_slice k((char*)key.get_data(), key.get_size());
+        data_slice v((char*)data.get_data(), data.get_size());
+
+        c = std::memcmp(prefix.data(), k.data(), prefix.size());
+        if(c == 0) {
+            if(usermem) {
+                if(size_error
+                || result[i].first.size() < k.size()
+                || result[i].second.size() < v.size()) {
+                    size_error = true;
+                } else {
+                    std::memcpy(result[i].first.data(), k.data(), k.size());
+                    if(v.size()) std::memcpy(result[i].second.data(), v.data(), v.size());
+                }
+                result[i].first.resize(k.size());
+                result[i].second.resize(v.size());
+            } else {
+                result.push_back(std::make_pair(k,v));
+            }
+            i++;
+        }
+    }
+    result.resize(i);
+    cursorp->close();
+    if(size_error) throw SDSKV_ERR_SIZE;
+#if 0
+    result.resize(0);
+    Dbc * cursorp;
+    Dbt key, data;
+    int ret;
+    _dbm->cursor(NULL, &cursorp, 0);
+
+    /* 'start' is like RADOS: not inclusive  */
+    if (start.size()) {
+        key.set_size(start.size());
+        key.set_data((void *)start.data());
+        ret = cursorp->get(&key, &data, DB_SET_RANGE);
+        if (ret != 0) {
+            cursorp->close();
+            return;
+        }
+    } else {
+        ret = cursorp->get(&key, &data, DB_FIRST);
+        if (ret != 0) {
+            cursorp->close();
+            return;
+        }
+    }
+
+    data_slice k((char*)key.get_data(), ((char*)key.get_data())+key.get_size());
     data_slice v((char*)data.get_data(), ((char*)data.get_data())+data.get_size());
 
-	/* SET_RANGE will return the smallest key greater than or equal to the
-	 * requested key, but we want strictly greater than */
+    /* SET_RANGE will return the smallest key greater than or equal to the
+     * requested key, but we want strictly greater than */
     int c = 0;
-	if (k != start) {
+    if (k != start) {
         c = std::memcmp(prefix.data(), k.data(), prefix.size());
         if(c == 0) {
             result.push_back(std::make_pair(k,v));
         }
     }
     while (result.size() < count && c >= 0) {
-	    ret = cursorp->get(&key, &data, DB_NEXT);
-	    if (ret !=0 ) break;
+        ret = cursorp->get(&key, &data, DB_NEXT);
+        if (ret !=0 ) break;
         
         data_slice k((char*)key.get_data(), ((char*)key.get_data())+key.get_size());
         data_slice v((char*)data.get_data(), ((char*)data.get_data())+data.get_size());
@@ -361,23 +476,23 @@ std::vector<std::pair<data_slice,data_slice>> BerkeleyDBDataStore::vlist_keyvals
         }
     }
     cursorp->close();
-    return result;
+#endif
 }
 
-std::vector<data_slice> BerkeleyDBDataStore::vlist_key_range(
-        const data_slice &lower_bound, const data_slice &upper_bound, hg_size_t max_keys) const {
-    std::vector<data_slice> result;
+void BerkeleyDBDataStore::vlist_key_range(
+        const data_slice &lower_bound,
+        const data_slice &upper_bound,
+        std::vector<data_slice>& result) const {
     // TODO implement this function
     throw SDSKV_OP_NOT_IMPL;
-    return result;
 }
 
-std::vector<std::pair<data_slice,data_slice>> BerkeleyDBDataStore::vlist_keyval_range(
-        const data_slice &lower_bound, const data_slice &upper_bound, hg_size_t max_keys) const {
-    std::vector<std::pair<data_slice,data_slice>> result;
+void BerkeleyDBDataStore::vlist_keyval_range(
+        const data_slice &lower_bound,
+        const data_slice &upper_bound,
+        std::vector<std::pair<data_slice,data_slice>>& result) const {
     // TODO implement this function
     throw SDSKV_OP_NOT_IMPL;
-    return result;
 }
 
 int BerkeleyDBDataStore::compkeys(Db *db, const Dbt *dbt1, const Dbt *dbt2, hg_size_t *locp) {

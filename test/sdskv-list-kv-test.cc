@@ -134,7 +134,7 @@ int main(int argc, char *argv[])
     /* **** put keys ***** */
     std::vector<std::string> keys;
     std::map<std::string, std::string> reference;
-    size_t max_value_size = 8000;
+    size_t max_value_size = 64;
     size_t max_key_size = 16;
 
     for(unsigned i=0; i < num_keys; i++) {

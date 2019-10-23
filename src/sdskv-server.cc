@@ -1521,7 +1521,7 @@ static void sdskv_list_keys_ult(hg_handle_t handle)
     hg_bulk_t keys_local_bulk   = HG_BULK_NULL;
 
     hg_size_t* client_ksizes = nullptr;
-    char* packed_keys_buffer = nullptr;
+    char* keys_local_buffer = nullptr;
     bool ksizes_use_poolset = false;
     bool keys_use_poolset = false;
 
@@ -1585,28 +1585,51 @@ static void sdskv_list_keys_ult(hg_handle_t handle)
         }
 
         /* make a copy of the remote key sizes */
-        std::vector<hg_size_t> remote_ksizes(client_ksizes, client_ksizes + in.max_keys);
+        std::vector<hg_size_t> old_ksizes(client_ksizes, client_ksizes + in.max_keys);
+        /* compute the total size needed to the buffer on the server side */
+        size_t keys_bulk_size = 0;
+        for(const auto& s : old_ksizes) keys_bulk_size += s;
+       
+        if(keys_bulk_size != 0) { 
+            /* allocate a local buffer to put the keys in */
+            hret = allocate_buffer_and_bulk(svr_ctx,
+                    keys_bulk_size, HG_BULK_READ_ONLY, (char**)&keys_local_buffer,
+                    &keys_local_bulk, &keys_use_poolset);
+            if(hret != HG_SUCCESS) {
+                throw SDSKV_ERR_POOLSET;
+            }
+        }
 
-        /* get the keys from the underlying database */    
+        size_t offset = 0;
+        std::vector<data_slice> key_slices(in.max_keys);
+        /* prepare a vector of slices from this buffer */
+        for(unsigned i = 0; i < in.max_keys; i++) {
+            auto s = old_ksizes[i];
+            key_slices[i] = data_slice(keys_local_buffer + offset, s);
+            offset += s;
+        }
+
+        /* get the keys from the underlying database */ 
         data_slice start_kdata(in.start_key.data, in.start_key.data+in.start_key.size);
         data_slice prefix(in.prefix.data, in.prefix.data+in.prefix.size);
-        auto keys = db->list_keys(start_kdata, in.max_keys, prefix);
-        hg_size_t num_keys = std::min((size_t)keys.size(), (size_t)in.max_keys);
+
+        bool size_error = false;
+        try {
+            db->list_keys(in.max_keys, start_kdata, key_slices, prefix);
+        } catch(int err) {
+            if(err == SDSKV_ERR_SIZE) {
+                size_error = true;
+            } else {
+                throw;
+            }
+        }
+        hg_size_t num_keys = key_slices.size();
 
         if(num_keys == 0) throw SDSKV_SUCCESS;
 
-        /* create the array of actual sizes */
-        std::vector<hg_size_t> true_ksizes(num_keys);
-        hg_size_t keys_bulk_size = 0;
-        bool size_error = false;
+        /* modify the client vector with actual sizes */
         for(unsigned i = 0; i < num_keys; i++) {
-            true_ksizes[i] = keys[i].size();
-            if(true_ksizes[i] > client_ksizes[i]) {
-                // this key has a size that exceeds the allocated size on client
-                size_error = true;
-            }
-            client_ksizes[i] = true_ksizes[i];
-            keys_bulk_size += true_ksizes[i];
+            client_ksizes[i] = key_slices[i].size();;
         }
         for(unsigned i = num_keys; i < in.max_keys; i++) {
             client_ksizes[i] = 0;
@@ -1621,39 +1644,23 @@ static void sdskv_list_keys_ult(hg_handle_t handle)
                 << "(push from ksizes_local_bulk to in.ksizes_bulk_handle)" << std::endl;
             throw SDSKV_ERR_MERCURY;
         }
-            
-        /* if user provided a size too small for some key, return error (we already set the right key sizes) */    
+
         if(size_error)
             throw SDSKV_ERR_SIZE;
 
         if(keys_bulk_size == 0)
             throw SDSKV_SUCCESS;
 
-        /* allocate a buffer for packed keys */
-        hret = allocate_buffer_and_bulk(svr_ctx,
-                keys_bulk_size, HG_BULK_READ_ONLY, (char**)&packed_keys_buffer,
-                &keys_local_bulk, &keys_use_poolset);
-        if(hret != HG_SUCCESS) {
-            throw SDSKV_ERR_POOLSET;
-        } 
-        /* copy the keys into the buffer */
-        size_t offset = 0;
-        for(unsigned i=0; i < num_keys; i++) {
-            memcpy(packed_keys_buffer + offset, keys[i].data(), keys[i].size());
-            offset += keys[i].size();
-        }
         /* transfer the keys to the client */
-        uint64_t remote_offset = 0;
-        uint64_t local_offset  = 0;
+        offset = 0;
         std::vector<margo_request> requests;
         requests.reserve(num_keys);
         for(unsigned i = 0; i < num_keys; i++) {
-
-            if(true_ksizes[i] > 0) {
+            if(client_ksizes[i] > 0) {
                 margo_request req;
                 hret = margo_bulk_itransfer(mid, HG_BULK_PUSH, origin_addr,
-                        in.keys_bulk_handle, remote_offset, keys_local_bulk,
-                        local_offset, true_ksizes[i], &req);
+                        in.keys_bulk_handle, offset, keys_local_bulk,
+                        offset, client_ksizes[i], &req);
                 requests.push_back(req);
                 if(hret != HG_SUCCESS) {
                     std::cerr << "Error: SDSKV list_keys could not issue bulk transfer (keys_local_bulk)" << std::endl;
@@ -1663,9 +1670,7 @@ static void sdskv_list_keys_ult(hg_handle_t handle)
                     throw SDSKV_ERR_MERCURY;
                 }
             }
-
-            remote_offset += remote_ksizes[i];
-            local_offset  += true_ksizes[i];
+            offset += old_ksizes[i];
         }
 
         for(auto& r : requests) {
@@ -1679,7 +1684,7 @@ static void sdskv_list_keys_ult(hg_handle_t handle)
     }
 
     free_buffer_and_bulk(svr_ctx, (char*)client_ksizes, ksizes_local_bulk, ksizes_use_poolset);
-    free_buffer_and_bulk(svr_ctx, packed_keys_buffer, keys_local_bulk, keys_use_poolset);
+    free_buffer_and_bulk(svr_ctx, keys_local_buffer, keys_local_bulk, keys_use_poolset);
     margo_respond(handle, &out);
     margo_free_input(handle, &in);
     margo_destroy(handle); 
@@ -1701,8 +1706,8 @@ static void sdskv_list_keyvals_ult(hg_handle_t handle)
 
     hg_size_t* ksizes = nullptr;
     hg_size_t* vsizes = nullptr;
-    char* packed_keys = nullptr;
-    char* packed_vals = nullptr;
+    char* local_keys = nullptr;
+    char* local_vals = nullptr;
 
     bool ksizes_use_poolset;
     bool vsizes_use_poolset;
@@ -1785,46 +1790,66 @@ static void sdskv_list_keyvals_ult(hg_handle_t handle)
         }
 
         /* make a copy of the remote key sizes and value sizes */
-        std::vector<hg_size_t> remote_ksizes(ksizes, ksizes + in.max_keys);
-        std::vector<hg_size_t> remote_vsizes(vsizes, vsizes + in.max_keys);
+        std::vector<hg_size_t> old_ksizes(ksizes, ksizes + in.max_keys);
+        std::vector<hg_size_t> old_vsizes(vsizes, vsizes + in.max_keys);
+
+        /* compute total size needed for the buffers */
+        hg_size_t keys_bulk_size = 0;
+        hg_size_t vals_bulk_size = 0;
+        for(unsigned i = 0; i < in.max_keys; i++) {
+            keys_bulk_size += old_ksizes[i];
+            vals_bulk_size += old_vsizes[i];
+        }
+
+        /* allocate local buffers and bulk */
+        if(keys_bulk_size != 0) {
+            hret = allocate_buffer_and_bulk(svr_ctx, keys_bulk_size, HG_BULK_READ_ONLY,
+                    &local_keys, &keys_local_bulk, &keys_use_poolset);
+            if(hret != HG_SUCCESS)
+                throw SDSKV_ERR_POOLSET;
+            if(vals_bulk_size != 0) {
+                hret = allocate_buffer_and_bulk(svr_ctx, vals_bulk_size, HG_BULK_READ_ONLY,
+                        &local_vals, &vals_local_bulk, &vals_use_poolset);
+                if(hret != HG_SUCCESS)
+                    throw SDSKV_ERR_POOLSET;
+            }
+        }
+
+        /* create slices of buffers allocated above */
+        std::vector<std::pair<data_slice,data_slice>> keyvals(in.max_keys);
+        size_t koffset = 0, voffset = 0;
+        for(unsigned i=0; i < in.max_keys; i++) {
+            keyvals[i].first = data_slice(local_keys + koffset, old_ksizes[i]);
+            keyvals[i].second = data_slice(local_vals + voffset, old_vsizes[i]);
+            koffset += old_ksizes[i];
+            voffset += old_vsizes[i];
+        }
 
         /* get the keys and values from the underlying database */    
         data_slice start_kdata(in.start_key.data, in.start_key.data+in.start_key.size);
         data_slice prefix(in.prefix.data, in.prefix.data+in.prefix.size);
-        auto keyvals = db->list_keyvals(start_kdata, in.max_keys, prefix);
-        hg_size_t num_keys = std::min((size_t)keyvals.size(), (size_t)in.max_keys);
+        bool size_error = false;
+        try {
+            db->list_keyvals(in.max_keys, start_kdata, keyvals, prefix);
+        } catch(int err) {
+            if(err == SDSKV_ERR_SIZE) size_error = true;
+            else throw;
+        }
+        hg_size_t num_keys = keyvals.size();
 
         out.nkeys = num_keys;
 
         if(num_keys == 0) throw SDSKV_SUCCESS;
 
-        bool size_error = false;
-
-        /* create the array of actual key sizes */
-        std::vector<hg_size_t> true_ksizes(num_keys);
-        hg_size_t keys_bulk_size = 0;
+        /* modify key sizes sent by client */
         for(unsigned i = 0; i < num_keys; i++) {
-            true_ksizes[i] = keyvals[i].first.size();
-            if(true_ksizes[i] > ksizes[i]) {
-                // this key has a size that exceeds the allocated size on client
-                size_error = true;
-            } 
-            ksizes[i] = true_ksizes[i];
-            keys_bulk_size += true_ksizes[i];
+            ksizes[i] = keyvals[i].first.size();
         }
         for(unsigned i = num_keys; i < in.max_keys; i++) ksizes[i] = 0;
 
-        /* create the array of actual value sizes */
-        std::vector<hg_size_t> true_vsizes(num_keys);
-        hg_size_t vals_bulk_size = 0;
+        /* modify value sizes sent by client */
         for(unsigned i = 0; i < num_keys; i++) {
-            true_vsizes[i] = keyvals[i].second.size();
-            if(true_vsizes[i] > vsizes[i]) {
-                // this value has a size that exceeds the allocated size on client
-                size_error = true;
-            }
-            vsizes[i] = true_vsizes[i];
-            vals_bulk_size += true_vsizes[i];
+            vsizes[i] = keyvals[i].second.size();
         }
         for(unsigned i = num_keys; i < in.max_keys; i++) vsizes[i] = 0;
 
@@ -1853,61 +1878,38 @@ static void sdskv_list_keyvals_ult(hg_handle_t handle)
         if(size_error)
             throw SDSKV_ERR_SIZE;
 
-        /* allocate a buffer for packed keys and a buffer for packed values, and copy keys and values */
-        hret = allocate_buffer_and_bulk(svr_ctx, keys_bulk_size, HG_BULK_READ_ONLY,
-                &packed_keys, &keys_local_bulk, &keys_use_poolset);
-        if(hret != HG_SUCCESS)
-            throw SDSKV_ERR_POOLSET;
-        if(vals_bulk_size != 0) {
-            hret = allocate_buffer_and_bulk(svr_ctx, vals_bulk_size, HG_BULK_READ_ONLY,
-                    &packed_vals, &vals_local_bulk, &vals_use_poolset);
-            if(hret != HG_SUCCESS)
-                throw SDSKV_ERR_POOLSET;
-        }
-
-        size_t vals_offset = 0;
-        size_t keys_offset = 0;
+        /* transfer the keys and values to the client */
+        koffset = 0;
+        voffset = 0;
+        std::vector<margo_request> requests;
+        requests.reserve(num_keys*2);
         for(unsigned i=0; i < num_keys; i++) {
-            memcpy(packed_keys + keys_offset, keyvals[i].first.data(), keyvals[i].first.size());
-            if(keyvals[i].second.size() != 0)
-                memcpy(packed_vals + vals_offset, keyvals[i].second.data(), keyvals[i].second.size());
-            keys_offset += keyvals[i].first.size();
-            vals_offset += keyvals[i].second.size();
-        }
-
-        uint64_t remote_offset = 0;
-        uint64_t local_offset  = 0;
-
-        /* transfer the keys to the client */
-        for(unsigned i=0; i < num_keys; i++) {
-            if(true_ksizes[i] > 0) {
-                hret = margo_bulk_transfer(mid, HG_BULK_PUSH, origin_addr,
-                        in.keys_bulk_handle, remote_offset, keys_local_bulk, local_offset, true_ksizes[i]);
+            margo_request req;
+            if(ksizes[i] > 0) {
+                hret = margo_bulk_itransfer(mid, HG_BULK_PUSH, origin_addr,
+                        in.keys_bulk_handle, koffset, keys_local_bulk, koffset, ksizes[i], &req);
                 if(hret != HG_SUCCESS) {
                     std::cerr << "Error: SDSKV list_keyvals could not issue bulk transfer (keys_local_bulk)" << std::endl;
+                    for(auto& r : requests) margo_wait(r);
                     throw SDSKV_ERR_MERCURY;
                 }
+                requests.push_back(req);
             }
-            remote_offset += remote_ksizes[i];
-            local_offset  += true_ksizes[i];
-        }
-
-        remote_offset = 0;
-        local_offset  = 0;
-
-        /* transfer the values to the client */
-        for(unsigned i=0; i < num_keys; i++) {
-            if(true_vsizes[i] > 0) {
-                hret = margo_bulk_transfer(mid, HG_BULK_PUSH, origin_addr,
-                        in.vals_bulk_handle, remote_offset, vals_local_bulk, local_offset, true_vsizes[i]);
+            if(vsizes[i] > 0) {
+                hret = margo_bulk_itransfer(mid, HG_BULK_PUSH, origin_addr,
+                        in.vals_bulk_handle, voffset, vals_local_bulk, voffset, vsizes[i], &req);
                 if(hret != HG_SUCCESS) {
                     std::cerr << "Error: SDSKV list_keyvals could not issue bulk transfer (vals_local_bulk)" << std::endl;
+                    for(auto& r : requests) margo_wait(r);
                     throw SDSKV_ERR_MERCURY;
                 }
+                requests.push_back(req);
             }
-            remote_offset += remote_vsizes[i];
-            local_offset  += true_vsizes[i];
+            koffset += old_ksizes[i];
+            voffset += old_vsizes[i];
         }
+
+        for(auto& r : requests) margo_wait(r);
 
         out.ret = SDSKV_SUCCESS;
 
@@ -1917,8 +1919,8 @@ static void sdskv_list_keyvals_ult(hg_handle_t handle)
 
     free_buffer_and_bulk(svr_ctx, (char*)ksizes, ksizes_local_bulk, ksizes_use_poolset);
     free_buffer_and_bulk(svr_ctx, (char*)vsizes, vsizes_local_bulk, vsizes_use_poolset);
-    free_buffer_and_bulk(svr_ctx, packed_keys, keys_local_bulk, keys_use_poolset);
-    free_buffer_and_bulk(svr_ctx, packed_vals, vals_local_bulk, vals_use_poolset);
+    free_buffer_and_bulk(svr_ctx, local_keys, keys_local_bulk, keys_use_poolset);
+    free_buffer_and_bulk(svr_ctx, local_vals, vals_local_bulk, vals_use_poolset);
     margo_respond(handle, &out);
     margo_free_input(handle, &in);
     margo_destroy(handle); 
@@ -2153,8 +2155,9 @@ static void sdskv_migrate_keys_prefixed_ult(hg_handle_t handle)
     data_slice start_key;
     data_slice prefix(in.key_prefix.data, in.key_prefix.data + in.key_prefix.size);
     do {
+        batch.resize(0);
         try {
-            batch = database->list_keyvals(start_key, 64, prefix);
+            database->list_keyvals(64, start_key, batch, prefix);
         } catch(int err) {
             out.ret = err;
             return;
@@ -2261,8 +2264,9 @@ static void sdskv_migrate_all_keys_ult(hg_handle_t handle)
     std::vector<std::pair<data_slice,data_slice>> batch;
     data_slice start_key;
     do {
+        batch.resize(0);
         try {
-            batch = database->list_keyvals(start_key, 64);
+            database->list_keyvals(64, start_key, batch);
         } catch(int err) {
             out.ret = err;
             return;

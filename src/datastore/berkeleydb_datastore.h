@@ -56,14 +56,27 @@ class BerkeleyDBDataStore : public AbstractDataStore {
         virtual remi_fileset_t create_and_populate_fileset() const override;
 #endif
     protected:
-        virtual std::vector<data_slice> vlist_keys(
-                const data_slice &start, hg_size_t count, const data_slice &prefix) const override;
-        virtual std::vector<std::pair<data_slice,data_slice>> vlist_keyvals(
-                const data_slice &start_key, hg_size_t count, const data_slice &) const override;
-        virtual std::vector<data_slice> vlist_key_range(
-                const data_slice &lower_bound, const data_slice &upper_bound, hg_size_t max_keys) const override;
-        virtual std::vector<std::pair<data_slice,data_slice>> vlist_keyval_range(
-                const data_slice &lower_bound, const data_slice& upper_bound, hg_size_t max_keys) const override;
+
+        virtual void vlist_keys(
+                uint64_t max_count,
+                const data_slice &start,
+                const data_slice &prefix,
+                std::vector<data_slice>& result) const override;
+
+        virtual void vlist_keyvals(
+                uint64_t max_count,
+                const data_slice &start_key,
+                const data_slice& prefix,
+                std::vector<std::pair<data_slice,data_slice>>& result) const override;
+
+        virtual void vlist_key_range(
+                const data_slice &lower_bound, const data_slice &upper_bound,
+                std::vector<data_slice>& result) const override;
+
+        virtual void vlist_keyval_range(
+                const data_slice &lower_bound, const data_slice& upper_bound,
+                std::vector<std::pair<data_slice,data_slice>>& result) const override;
+
         DbEnv *_dbenv = nullptr;
         Db *_dbm = nullptr;
         DbWrapper* _wrapper = nullptr;
