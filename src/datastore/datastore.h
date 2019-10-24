@@ -48,6 +48,18 @@ class AbstractDataStore {
                 *vsize = val.size();
             return ret;
         }
+        virtual int get_multi(hg_size_t num_items,
+                        const void* const* keys,
+                        const hg_size_t* ksizes,
+                        void** values,
+                        hg_size_t* vsizes) {
+            int ret = 0;
+            for(hg_size_t i=0; i < num_items; i++) {
+                int r = get(keys[i], ksizes[i], values[i], &vsizes[i]);
+                ret = ret == 0 ? r : 0;
+            }
+            return ret;
+        }
         virtual bool length(const data_slice &key, size_t& result) {
             data_slice value;
             if(get(key, value) == SDSKV_SUCCESS) {
