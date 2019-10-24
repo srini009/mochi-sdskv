@@ -1014,17 +1014,10 @@ static void sdskv_get_multi_ult(hg_handle_t handle)
 
     /* go through the key/value pairs and get the values from the database */
     for(unsigned i=0; i < in.num_keys; i++) {
-        data_slice kdata(packed_keys, packed_keys+key_sizes[i]);
-        data_slice vdata;
-        size_t client_allocated_value_size = val_sizes[i];
+        data_slice kdata(packed_keys, key_sizes[i]);
+        data_slice vdata(packed_values, val_sizes[i]);
         if(db->get(kdata, vdata) == SDSKV_SUCCESS) {
-            size_t old_vsize = val_sizes[i];
-            if(vdata.size() > val_sizes[i]) {
-                val_sizes[i] = 0;
-            } else {
-                val_sizes[i] = vdata.size();
-                memcpy(packed_values, vdata.data(), val_sizes[i]);
-            }
+            val_sizes[i] = vdata.size();
         } else {
             val_sizes[i] = 0;
         }
