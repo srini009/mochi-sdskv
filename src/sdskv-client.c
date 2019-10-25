@@ -811,7 +811,8 @@ int sdskv_get_multi(sdskv_provider_handle_t provider,
     get_multi_out_t out;
     void**          key_seg_ptrs  = NULL;
     hg_size_t*      key_seg_sizes = NULL;
-    char*           vals_buffer   = NULL;
+    void**          val_seg_ptrs  = NULL;
+    hg_size_t*      val_seg_sizes = NULL;
     int             vals_use_poolset = 1;
     int             keys_use_poolset = 1;
 
@@ -839,6 +840,18 @@ int sdskv_get_multi(sdskv_provider_handle_t provider,
         in.keys_bulk_size += key_seg_sizes[i];
     }
 
+    /* create an array of val sizes and val pointers */
+    val_seg_sizes       = malloc(sizeof(hg_size_t)*(num+1));
+    val_seg_sizes[0]    = num*sizeof(hg_size_t);
+    memcpy(val_seg_sizes+1, vsizes, num*sizeof(hg_size_t));
+    val_seg_ptrs        = malloc(sizeof(void*)*(num+1));
+    val_seg_ptrs[0]     = (void*)vsizes;
+    memcpy(val_seg_ptrs+1, values, num*sizeof(void*));
+    
+    for(i=0; i<num+1; i++) {
+        in.vals_bulk_size += val_seg_sizes[i];
+    }
+
     /* create the bulk handle to access the keys */
     hret = create_bulk(provider->client, num+1, key_seg_ptrs, key_seg_sizes,
             HG_BULK_READ_ONLY, &keys_use_poolset, &in.keys_bulk_handle);
@@ -848,19 +861,8 @@ int sdskv_get_multi(sdskv_provider_handle_t provider,
         goto finish;
     }
 
-    /* allocate memory to send max value sizes and receive values */
-    for(i=0; i<num; i++) {
-        in.vals_bulk_size += vsizes[i];
-    }
-    in.vals_bulk_size += sizeof(hg_size_t)*num;
-    vals_buffer = malloc(in.vals_bulk_size);
-    hg_size_t* value_sizes = (hg_size_t*)vals_buffer; // beginning of the buffer used to hold sizes
-    for(i=0; i<num; i++) {
-        value_sizes[i] = vsizes[i];
-    }
-
     /* create the bulk handle to access the values */
-    hret = create_bulk(provider->client, 1, (void**)&vals_buffer, &in.vals_bulk_size,
+    hret = create_bulk(provider->client, num+1, val_seg_ptrs, val_seg_sizes,
             HG_BULK_READWRITE, &vals_use_poolset, &in.vals_bulk_handle);
     if(hret != HG_SUCCESS) {
         fprintf(stderr,"[SDSKV] failed to create bulk in sdskv_get_multi()\n");
@@ -898,7 +900,7 @@ int sdskv_get_multi(sdskv_provider_handle_t provider,
 
     /* sync the bulk */
     hret = sync_bulk(provider->client, in.vals_bulk_handle, 0, in.vals_bulk_size,
-            1, (void**)&vals_buffer, &in.vals_bulk_size, vals_use_poolset);
+            num+1, val_seg_ptrs, val_seg_sizes, vals_use_poolset);
     if(hret != HG_SUCCESS) {
         fprintf(stderr, "[SDSKV] sync_bulk() failed in sdskv_get_multi()\n");
         ret = SDSKV_ERR_POOLSET;
@@ -910,23 +912,14 @@ int sdskv_get_multi(sdskv_provider_handle_t provider,
         goto finish;
     }
 
-    /* copy the values from the buffer into the user-provided buffer */
-    // XXX we could optimize this if use_poolset == 1, by removing the
-    // call to sync_bulk and taking data directly out of the bulk handle
-    char* value_ptr = vals_buffer + num*sizeof(hg_size_t);
-    for(i=0; i<num; i++) {
-        memcpy(values[i], value_ptr, value_sizes[i]);
-        vsizes[i] = value_sizes[i];
-        value_ptr += value_sizes[i];
-    }
-
 finish:
     margo_free_output(handle, &out);
     destroy_bulk(provider->client, keys_use_poolset, in.keys_bulk_handle);
     destroy_bulk(provider->client, vals_use_poolset, in.vals_bulk_handle);
     free(key_seg_sizes);
     free(key_seg_ptrs);
-    free(vals_buffer);
+    free(val_seg_sizes);
+    free(val_seg_ptrs);
     margo_destroy(handle);
     return ret;
 }

@@ -1009,25 +1009,50 @@ static void sdskv_get_multi_ult(hg_handle_t handle)
     char* packed_keys = local_keys_buffer + in.num_keys*sizeof(hg_size_t);
     /* interpret beginning of the value buffer as a list of value sizes */
     hg_size_t* val_sizes = (hg_size_t*)local_vals_buffer;
-    /* find beginning of region where to pack values */
+    /* find beginning of region that should contain values */
     char* packed_values = local_vals_buffer + in.num_keys*sizeof(hg_size_t);
 
     /* go through the key/value pairs and get the values from the database */
+    std::vector<margo_request> requests;
+    requests.reserve(in.num_keys);
+    hg_size_t remote_offset = in.num_keys*sizeof(hg_size_t);
+    hg_size_t local_offset = vals_offset + in.num_keys*sizeof(hg_size_t);
     for(unsigned i=0; i < in.num_keys; i++) {
+        hg_size_t client_vsize = val_sizes[i]; // size allocated by client for this value
         data_slice kdata(packed_keys, key_sizes[i]);
         data_slice vdata(packed_values, val_sizes[i]);
         if(db->get(kdata, vdata) == SDSKV_SUCCESS) {
-            val_sizes[i] = vdata.size();
+            hg_size_t actual_vsize = vdata.size();
+            /* do a PUSH operation to push back the value to the client */
+            margo_request req;
+            hret = margo_bulk_itransfer(mid, HG_BULK_PUSH, info->addr, in.vals_bulk_handle, remote_offset,
+                    local_bulk_handle, local_offset, actual_vsize, &req);
+            if(hret != HG_SUCCESS) {
+                val_sizes[i] = 0;
+                break;
+            } else {
+                val_sizes[i] = actual_vsize;
+                requests.push_back(req);
+            }
         } else {
             val_sizes[i] = 0;
         }
         packed_keys += key_sizes[i];
-        packed_values += val_sizes[i];
+        packed_values += client_vsize;
+        remote_offset += client_vsize;
+        local_offset  += client_vsize;
+    }
+    for(auto& r : requests)
+        margo_wait(r);
+
+    if(hret != HG_SUCCESS) {
+        out.ret = SDSKV_ERR_MERCURY;
+        return;
     }
 
-    /* do a PUSH operation to push back the values to the client */
+    /* do a PUSH operation to push back the value sizes to the client */
     hret = margo_bulk_transfer(mid, HG_BULK_PUSH, info->addr, in.vals_bulk_handle, 0,
-            local_bulk_handle, vals_offset, in.vals_bulk_size);
+            local_bulk_handle, vals_offset, in.num_keys*sizeof(hg_size_t));
     if(hret != HG_SUCCESS) {
         out.ret = SDSKV_ERR_MERCURY;
         return;
