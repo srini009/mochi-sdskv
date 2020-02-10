@@ -3,7 +3,7 @@
 
 #include <cstring>
 #include "kv-config.h"
-#include "bulk.h"
+#include "data_slice.h"
 #include "datastore/datastore.h"
 
 class NullDataStore : public AbstractDataStore {
@@ -29,11 +29,7 @@ class NullDataStore : public AbstractDataStore {
 
         virtual void sync() override {}
 
-        virtual int put(const ds_bulk_t &key, const ds_bulk_t &data) override {
-            return SDSKV_SUCCESS;
-        }
-
-        virtual int put(ds_bulk_t &&key, ds_bulk_t &&data) override {
+        virtual int put(const data_slice &key, const data_slice &data) override {
             return SDSKV_SUCCESS;
         }
 
@@ -41,15 +37,11 @@ class NullDataStore : public AbstractDataStore {
             return SDSKV_SUCCESS;
         }
 
-        virtual bool get(const ds_bulk_t &key, ds_bulk_t &data) override {
-            return true;
+        virtual int get(const data_slice &key, data_slice &data) override {
+            return SDSKV_ERR_UNKNOWN_KEY;
         }
 
-        virtual bool get(const ds_bulk_t &key, std::vector<ds_bulk_t>& values) override {
-            return true;
-        }
-
-        virtual bool exists(const ds_bulk_t& key) const override {
+        virtual bool exists(const data_slice& key) const override {
             return false;
         }
 
@@ -57,7 +49,7 @@ class NullDataStore : public AbstractDataStore {
             return false;
         }
 
-        virtual bool erase(const ds_bulk_t &key) override {
+        virtual bool erase(const data_slice &key) override {
             return false;
         }
 
@@ -78,28 +70,32 @@ class NullDataStore : public AbstractDataStore {
 
     protected:
 
-        virtual std::vector<ds_bulk_t> vlist_keys(
-                const ds_bulk_t &start_key, hg_size_t count, const ds_bulk_t &prefix) const override {
-            std::vector<ds_bulk_t> result;
-            return result;
+        virtual void vlist_keys(
+                uint64_t max_count,
+                const data_slice &start_key,
+                const data_slice &prefix,
+                std::vector<data_slice>& result) const override {
         }
 
-        virtual std::vector<std::pair<ds_bulk_t,ds_bulk_t>> vlist_keyvals(
-                const ds_bulk_t &start_key, hg_size_t count, const ds_bulk_t &prefix) const override {
-            std::vector<std::pair<ds_bulk_t,ds_bulk_t>> result;
-            return result;
+        virtual void vlist_keyvals(
+                uint64_t max_count,
+                const data_slice &start_key,
+                const data_slice &prefix,
+                std::vector<std::pair<data_slice,data_slice>>& result) const override {
         }
 
-        virtual std::vector<ds_bulk_t> vlist_key_range(
-                const ds_bulk_t &lower_bound, const ds_bulk_t &upper_bound, hg_size_t max_keys) const override {
-            std::vector<ds_bulk_t> result;
-            return result;
+        virtual void vlist_key_range(
+                const data_slice &lower_bound,
+                const data_slice &upper_bound,
+                std::vector<data_slice>& result) const override {
+            throw SDSKV_OP_NOT_IMPL;
         }
 
-        virtual std::vector<std::pair<ds_bulk_t,ds_bulk_t>> vlist_keyval_range(
-                const ds_bulk_t &lower_bound, const ds_bulk_t& upper_bound, hg_size_t max_keys) const override {
-            std::vector<std::pair<ds_bulk_t,ds_bulk_t>> result;
-            return result;
+        virtual void vlist_keyval_range(
+                const data_slice &lower_bound,
+                const data_slice& upper_bound,
+                std::vector<std::pair<data_slice,data_slice>>& result) const override {
+            throw SDSKV_OP_NOT_IMPL;
         }
 };
 
