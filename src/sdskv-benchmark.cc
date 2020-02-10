@@ -692,6 +692,7 @@ static void run_server(MPI_Comm comm, Json::Value& config);
 static void run_client(MPI_Comm comm, Json::Value& config);
 static void run_single_node(Json::Value& config);
 static sdskv_db_type_t database_type_from_string(const std::string& type);
+static void parse_extra_cmd_arg(Json::Value& config, const char* arg);
 
 /**
  * @brief Main function.
@@ -703,9 +704,9 @@ int main(int argc, char** argv) {
     MPI_Comm_rank(MPI_COMM_WORLD, &rank);
     MPI_Comm_size(MPI_COMM_WORLD, &size);
 
-    if(argc != 2) {
+    if(argc < 2) {
         if(rank == 0) {
-            std::cerr << "Usage: " << argv[0] << " <config.json>" << std::endl;
+            std::cerr << "Usage: " << argv[0] << " <config.json> [ a.b.c=x ... ]" << std::endl;
             MPI_Abort(MPI_COMM_WORLD, -1);
         }
     }
@@ -718,6 +719,10 @@ int main(int argc, char** argv) {
 
     Json::Value config;
     config_file >> config;
+
+    for(unsigned i = 2; i < argc; i++) {
+        parse_extra_cmd_arg(config, argv[i]);
+    }
 
     MPI_Comm comm = MPI_COMM_WORLD;
     bool single_node = (size == 1);
@@ -840,15 +845,27 @@ static void run_client(MPI_Comm comm, Json::Value& config) {
         std::vector<std::unique_ptr<AbstractBenchmark>> benchmarks;
         std::vector<unsigned> repetitions;
         std::vector<std::string> types;
-        benchmarks.reserve(config["benchmarks"].size());
-        repetitions.reserve(config["benchmarks"].size());
-        types.reserve(config["benchmarks"].size());
-        for(auto& bench_config : config["benchmarks"]) {
+        size_t num_benchmarks = 1;
+        if(config["benchmarks"].isArray())
+            num_benchmarks = config["benchmarks"].size();
+        benchmarks.reserve(num_benchmarks);
+        repetitions.reserve(num_benchmarks);
+        types.reserve(num_benchmarks);
+        if(config["benchmarks"].isArray()) {
+            for(auto& bench_config : config["benchmarks"]) {
+                std::string type = bench_config["type"].asString();
+                types.push_back(type);
+                benchmarks.push_back(AbstractBenchmark::create(type, bench_config, comm, db));
+                repetitions.push_back(bench_config["repetitions"].asUInt());
+            }
+        } else {
+            auto& bench_config = config["benchmarks"];
             std::string type = bench_config["type"].asString();
             types.push_back(type);
             benchmarks.push_back(AbstractBenchmark::create(type, bench_config, comm, db));
             repetitions.push_back(bench_config["repetitions"].asUInt());
         }
+
         // main execution loop
         for(unsigned i = 0; i < benchmarks.size(); i++) {
             auto& bench  = benchmarks[i];
@@ -882,7 +899,10 @@ static void run_client(MPI_Comm comm, Json::Value& config) {
             if(rank == 0) {
                 size_t n = global_timings.size();
                 std::cout << "================ " << types[i] << " ================" << std::endl;
-                styledStream.write(std::cout, config["benchmarks"][i]);
+                if(config["benchmarks"].isArray())
+                    styledStream.write(std::cout, config["benchmarks"][i]);
+                else
+                    styledStream.write(std::cout, config["benchmarks"]);
                 std::cout << "-----------------" << std::string(types[i].size(),'-') << "-----------------" << std::endl;
                 double average  = std::accumulate(global_timings.begin(), global_timings.end(), 0.0) / n;
                 double variance = std::accumulate(global_timings.begin(), global_timings.end(), 0.0, [average](double acc, double x) {
@@ -979,10 +999,21 @@ static void run_single_node(Json::Value& config) {
         std::vector<std::unique_ptr<AbstractBenchmark>> benchmarks;
         std::vector<unsigned> repetitions;
         std::vector<std::string> types;
-        benchmarks.reserve(config["benchmarks"].size());
-        repetitions.reserve(config["benchmarks"].size());
-        types.reserve(config["benchmarks"].size());
-        for(auto& bench_config : config["benchmarks"]) {
+        size_t num_benchmarks = 1;
+        if(config["benchmarks"].isArray())
+            num_benchmarks = config["benchmarks"].size();
+        benchmarks.reserve(num_benchmarks);
+        repetitions.reserve(num_benchmarks);
+        types.reserve(num_benchmarks);
+        if(config["benchmarks"].isArray()) {
+            for(auto& bench_config : config["benchmarks"]) {
+                std::string type = bench_config["type"].asString();
+                types.push_back(type);
+                benchmarks.push_back(AbstractBenchmark::create(type, bench_config, MPI_COMM_WORLD, db));
+                repetitions.push_back(bench_config["repetitions"].asUInt());
+            }
+        } else {
+            auto& bench_config = config["benchmarks"];
             std::string type = bench_config["type"].asString();
             types.push_back(type);
             benchmarks.push_back(AbstractBenchmark::create(type, bench_config, MPI_COMM_WORLD, db));
@@ -1011,7 +1042,10 @@ static void run_single_node(Json::Value& config) {
             // print report
             size_t n = global_timings.size();
             std::cout << "================ " << types[i] << " ================" << std::endl;
-            styledStream.write(std::cout, config["benchmarks"][i]);
+            if(config["benchmarks"].isArray())
+                styledStream.write(std::cout, config["benchmarks"][i]);
+            else
+                styledStream.write(std::cout, config["benchmarks"]);
             std::cout << "-----------------" << std::string(types[i].size(),'-') << "-----------------" << std::endl;
             double average  = std::accumulate(global_timings.begin(), global_timings.end(), 0.0) / n;
             double variance = std::accumulate(global_timings.begin(), global_timings.end(), 0.0, [average](double acc, double x) {
@@ -1051,4 +1085,40 @@ static sdskv_db_type_t database_type_from_string(const std::string& type) {
         return KVDB_BERKELEYDB;
     }
     throw std::runtime_error(std::string("Unknown database type \"") + type + "\"");
+}
+
+static void parse_extra_cmd_arg(Json::Value& config, const char* arg) {
+    // find first instance of a point
+    const char* period = strchr(arg,'.');
+    // period found, call recursively
+    if(period != NULL) {
+        std::string key(arg, (size_t)(period - arg));
+        parse_extra_cmd_arg(config[key], period+1);
+        return;
+    }
+    // period not found, search for equal sign
+    const char* equal = strchr(arg, '=');
+    if(!equal) throw std::runtime_error("Syntax error in command line");
+    std::string key = std::string(arg, (size_t)(equal - arg));
+    std::string val = std::string(equal+1);
+    if(val[0] == '"' && val[val.size()-1] == '"') {
+        config[key] = val.substr(1,val.size()-2);
+    } else if(val == "true") {
+        config[key] = true;
+    } else if(val == "false") {
+        config[key] = false;
+    } else {
+        bool is_number = true;
+        for(auto& c : val) {
+            if(c < '0' || c > '9') {
+                is_number = false;
+                break;
+            }
+        }
+        if(is_number) {
+            config[key] = atoi(val.c_str());
+        } else {
+            config[key] = val;
+        }
+    }
 }
