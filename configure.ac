@@ -186,6 +186,29 @@ else
 fi
 AC_SUBST(USE_REMI)
 
+AC_ARG_ENABLE(bedrock,
+              [AS_HELP_STRING([--enable-bedrock],[Enable Bedrock (Mochi loader) support @<:@default=no@:>@])],
+              [case "${enableval}" in
+                yes) enable_bedrock="yes" ;;
+                no) enable_bedrock="no" ;;
+                *) AC_MSG_ERROR(bad value ${enableval} for --enable-bedrock) ;;
+               esac],
+              [enable_bedrock="no"]
+)
+AM_CONDITIONAL(ENABLE_BEDROCK, test x$enable_bedrock = xyes)
+if test "$enable_bedrock" = "yes" ; then
+	AC_DEFINE(USE_BEDROCK, 1, [Bedrock support enabled.])
+	USE_BEDROCK=1
+	PKG_CHECK_MODULES([BEDROCK],[bedrock-client],[],
+			  AC_MSG_ERROR([Bedrock requested, but could not find bedrock]))
+	LIBS="$BEDROCK_LIBS $LIBS"
+	CPPFLAGS="$BEDROCK_CFLAGS $CPPFLAGS"
+else
+	USE_BEDROCK=0
+fi
+AM_CONDITIONAL(BUILD_BEDROCK, test $USE_BEDROCK -eq 1)
+AC_SUBST(USE_BEDROCK)
+
 AC_ARG_ENABLE(benchmark,
               [AS_HELP_STRING([--enable-benchmark],[Build SDSKV benchmark @<:@default=no@:>@])],
               [case "${enableval}" in

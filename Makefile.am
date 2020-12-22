@@ -53,7 +53,8 @@ endif
 #		   lib/libsdskv-client.la \
 #		   lib/libsdskv-server.la
 lib_LTLIBRARIES = lib/libsdskv-client.la \
-		  lib/libsdskv-server.la
+		  lib/libsdskv-server.la \
+		  lib/libsdskv-bedrock.la
 
 lib_libsdskv_client_la_SOURCES = src/sdskv-client.c
 
@@ -87,7 +88,13 @@ if BUILD_LEVELDB
 lib_libsdskv_server_la_SOURCES += src/datastore/leveldb_datastore.cc
 endif
 
+
 lib_libsdskv_server_la_LIBADD = ${SERVER_LIBS}
+
+if BUILD_BEDROCK
+lib_libsdskv_bedrock_la_SOURCES = src/sdskv-bedrock.c
+lib_libsdskv_bedrock_la_LIBADD = ${LIBS} lib/libsdskv-client.la ${SERVER_LIBS} lib/libsdskv-server.la
+endif
 
 include_HEADERS = include/sdskv-client.h \
 		  include/sdskv-server.h \
