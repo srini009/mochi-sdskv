@@ -148,7 +148,7 @@ extern "C" int sdskv_provider_register(
         hg_bool_t flag;
         margo_provider_registered_name(mid, "sdskv_put_rpc", provider_id, &id, &flag);
         if(flag == HG_TRUE) {
-            fprintf(stderr, "sdskv_provider_register(): a provider with the same provider id (%d) already exists\n", provider_id);
+            margo_error(mid, "sdskv_provider_register(): a provider with the same provider id (%d) already exists\n", provider_id);
             return SDSKV_ERR_PR_EXISTS;
         }
     }
@@ -559,7 +559,7 @@ static void sdskv_open_ult(hg_handle_t handle)
     sdskv_provider_t svr_ctx = 
         (sdskv_provider_t)margo_registered_data(mid, info->id);
     if(!svr_ctx) {
-        fprintf(stderr, "Error (sdskv_open_ult): SDSKV could not find provider with id\n"); 
+        margo_error(mid, "Error (sdskv_open_ult): SDSKV could not find provider with id\n");
         out.ret = SDSKV_ERR_UNKNOWN_PR;
         margo_respond(handle, &out);
         margo_destroy(handle);
@@ -609,7 +609,7 @@ static void sdskv_count_db_ult(hg_handle_t handle)
     sdskv_provider_t svr_ctx = 
         (sdskv_provider_t)margo_registered_data(mid, info->id);
     if(!svr_ctx) {
-        fprintf(stderr, "Error (sdskv_count_db_ult): SDSKV could not find provider with id\n"); 
+        margo_error(mid, "Error (sdskv_count_db_ult): SDSKV could not find provider with id\n");
         out.ret = SDSKV_ERR_UNKNOWN_PR;
         margo_respond(handle, &out);
         margo_destroy(handle);
@@ -641,7 +641,7 @@ static void sdskv_list_db_ult(hg_handle_t handle)
     sdskv_provider_t svr_ctx = 
         (sdskv_provider_t)margo_registered_data(mid, info->id);
     if(!svr_ctx) {
-        fprintf(stderr, "Error (sdskv_list_db_ult): SDSKV could not find provider with id\n"); 
+        margo_error(mid, "Error (sdskv_list_db_ult): SDSKV could not find provider with id\n"); 
         out.ret = SDSKV_ERR_UNKNOWN_PR;
         margo_respond(handle, &out);
         margo_destroy(handle);
@@ -699,7 +699,7 @@ static void sdskv_put_ult(hg_handle_t handle)
     sdskv_provider_t svr_ctx = 
         (sdskv_provider_t)margo_registered_data(mid, info->id);
     if(!svr_ctx) {
-        fprintf(stderr, "Error (sdskv_put_ult): SDSKV could not find provider\n"); 
+        margo_error(mid, "Error (sdskv_put_ult): SDSKV could not find provider\n");
         out.ret = SDSKV_ERR_UNKNOWN_PR;
         margo_respond(handle, &out);
         margo_destroy(handle);
@@ -708,7 +708,7 @@ static void sdskv_put_ult(hg_handle_t handle)
 
     hret = margo_get_input(handle, &in);
     if(hret != HG_SUCCESS) {
-        fprintf(stderr, "Error (sdskv_put_ult): margo_get_input failed with error %d\n", hret);
+        margo_error(mid, "Error (sdskv_put_ult): margo_get_input failed with error %d\n", hret);
         out.ret = SDSKV_MAKE_HG_ERROR(hret);
         margo_respond(handle, &out);
         margo_destroy(handle);
@@ -719,7 +719,7 @@ static void sdskv_put_ult(hg_handle_t handle)
     auto it = svr_ctx->databases.find(in.db_id);
     if(it == svr_ctx->databases.end()) {
         ABT_rwlock_unlock(svr_ctx->lock);
-        fprintf(stderr, "Error (sdskv_put_ult): could not find target database\n");
+        margo_error(mid, "Error (sdskv_put_ult): could not find target database\n");
         out.ret = SDSKV_ERR_UNKNOWN_DB;
         margo_respond(handle, &out);
         margo_free_input(handle, &in);
@@ -947,7 +947,7 @@ static void sdskv_length_ult(hg_handle_t handle)
     sdskv_provider_t svr_ctx = 
         (sdskv_provider_t)margo_registered_data(mid, info->id);
     if(!svr_ctx) {
-        fprintf(stderr, "Error: SDSKV could not find provider\n"); 
+        margo_error(mid, "Error: SDSKV could not find provider\n");
         out.ret = SDSKV_ERR_UNKNOWN_PR;
         margo_respond(handle, &out);
         margo_destroy(handle);
@@ -1007,7 +1007,7 @@ static void sdskv_get_ult(hg_handle_t handle)
     sdskv_provider_t svr_ctx = 
         (sdskv_provider_t)margo_registered_data(mid, info->id);
     if(!svr_ctx) {
-        fprintf(stderr, "Error: SDSKV could not find provider\n"); 
+        margo_error(mid, "Error: SDSKV could not find provider\n");
         out.ret = SDSKV_ERR_UNKNOWN_PR;
         margo_respond(handle, &out);
         margo_destroy(handle);
@@ -1676,7 +1676,7 @@ static void sdskv_bulk_put_ult(hg_handle_t handle)
     sdskv_provider_t svr_ctx = 
         (sdskv_provider_t)margo_registered_data(mid, info->id);
     if(!svr_ctx) {
-        fprintf(stderr, "Error (sdskv_bulk_put_ult): SDSKV could not find provider\n"); 
+        margo_error(mid, "Error (sdskv_bulk_put_ult): SDSKV could not find provider\n");
         out.ret = SDSKV_ERR_UNKNOWN_PR;
         margo_respond(handle, &out);
         margo_destroy(handle);
@@ -1761,7 +1761,7 @@ static void sdskv_bulk_get_ult(hg_handle_t handle)
     sdskv_provider_t svr_ctx = 
         (sdskv_provider_t)margo_registered_data(mid, info->id);
     if(!svr_ctx) {
-        fprintf(stderr, "Error (sdskv_bulk_get_ult): SDSKV could not find provider\n"); 
+        margo_error(mid, "Error (sdskv_bulk_get_ult): SDSKV could not find provider\n");
         out.ret = SDSKV_ERR_UNKNOWN_PR;
         margo_respond(handle, &out);
         margo_destroy(handle);
@@ -1865,7 +1865,7 @@ static void sdskv_erase_ult(hg_handle_t handle)
     sdskv_provider_t svr_ctx = 
         (sdskv_provider_t)margo_registered_data(mid, info->id);
     if(!svr_ctx) {
-        fprintf(stderr, "Error (sdskv_erase_ult): SDSKV could not find provider\n"); 
+        margo_error(mid, "Error (sdskv_erase_ult): SDSKV could not find provider\n");
         out.ret = SDSKV_ERR_UNKNOWN_PR;
         margo_respond(handle, &out);
         margo_destroy(handle);
@@ -2002,7 +2002,7 @@ static void sdskv_exists_ult(hg_handle_t handle)
     sdskv_provider_t svr_ctx = 
         (sdskv_provider_t)margo_registered_data(mid, info->id);
     if(!svr_ctx) {
-        fprintf(stderr, "Error (sdskv_exists_ult): SDSKV could not find provider\n"); 
+        margo_error(mid, "Error (sdskv_exists_ult): SDSKV could not find provider\n");
         out.ret = SDSKV_ERR_UNKNOWN_PR;
         margo_respond(handle, &out);
         margo_destroy(handle);
@@ -2061,7 +2061,7 @@ static void sdskv_list_keys_ult(hg_handle_t handle)
     sdskv_provider_t svr_ctx = 
         (sdskv_provider_t)margo_registered_data(mid, info->id);
     if(!svr_ctx) {
-        std::cerr << "Error (sdskv_list_keys_ult): SDSKV list_keys could not find provider" << std::endl;
+        margo_error(mid, "Error (sdskv_list_keys_ult): SDSKV list_keys could not find provider\n");
         out.ret = SDSKV_ERR_UNKNOWN_PR;
         margo_respond(handle, &out);
         margo_destroy(handle);
@@ -2071,7 +2071,7 @@ static void sdskv_list_keys_ult(hg_handle_t handle)
     /* get the input */
     hret = margo_get_input(handle, &in);
     if(hret != HG_SUCCESS) {
-        std::cerr << "Error: SDSKV list_keys could not get RPC input" << std::endl;
+        margo_error(mid, "Error: SDSKV list_keys could not get RPC input\n");
         out.ret = SDSKV_MAKE_HG_ERROR(hret);
         margo_respond(handle, &out);
         margo_destroy(handle);
@@ -2084,7 +2084,7 @@ static void sdskv_list_keys_ult(hg_handle_t handle)
         ABT_rwlock_rdlock(svr_ctx->lock);
         auto it = svr_ctx->databases.find(in.db_id);
         if(it == svr_ctx->databases.end()) {
-            std::cerr << "Error: SDSKV list_keys could not get database with id " << in.db_id << std::endl;
+            margo_error(mid, "Error: SDSKV list_keys could not get database with id %ld\n", in.db_id);
             ABT_rwlock_unlock(svr_ctx->lock);
             throw (int)SDSKV_ERR_UNKNOWN_DB;
         }
@@ -2099,7 +2099,7 @@ static void sdskv_list_keys_ult(hg_handle_t handle)
         hret = margo_bulk_create(mid, 1, ksizes_addr.data(), 
                 &ksizes_bulk_size, HG_BULK_READWRITE, &ksizes_local_bulk);
         if(hret != HG_SUCCESS) {
-            std::cerr << "Error: SDSKV list_keys could not create bulk handle (ksizes_local_bulk)" << std::endl;
+            margo_error(mid, "Error: SDSKV list_keys could not create bulk handle (ksizes_local_bulk)\n");
             throw (int)SDSKV_MAKE_HG_ERROR(hret);
         }
 
@@ -2109,8 +2109,8 @@ static void sdskv_list_keys_ult(hg_handle_t handle)
         hret = margo_bulk_transfer(mid, HG_BULK_PULL, origin_addr,
                 in.ksizes_bulk_handle, 0, ksizes_local_bulk, 0, ksizes_bulk_size);
         if(hret != HG_SUCCESS) {
-            std::cerr << "Error: SDSKV list_keys could not issue bulk transfer " 
-                << "(pull from in.ksizes_bulk_handle to ksizes_local_bulk)" << std::endl;
+            margo_error(mid, "Error: SDSKV list_keys could not issue bulk transfer "
+                "(pull from in.ksizes_bulk_handle to ksizes_local_bulk)\n");
             throw (int)SDSKV_MAKE_HG_ERROR(hret);
         }
 
@@ -2147,8 +2147,8 @@ static void sdskv_list_keys_ult(hg_handle_t handle)
         hret = margo_bulk_transfer(mid, HG_BULK_PUSH, origin_addr, 
                 in.ksizes_bulk_handle, 0, ksizes_local_bulk, 0, ksizes_bulk_size);
         if(hret != HG_SUCCESS) {
-            std::cerr << "Error: SDSKV list_keys could not issue bulk transfer "
-                << "(push from ksizes_local_bulk to in.ksizes_bulk_handle)" << std::endl;
+            margo_error(mid, "Error: SDSKV list_keys could not issue bulk transfer "
+                "(push from ksizes_local_bulk to in.ksizes_bulk_handle)\n");
             throw (int)SDSKV_MAKE_HG_ERROR(hret);
         }
             
@@ -2166,7 +2166,7 @@ static void sdskv_list_keys_ult(hg_handle_t handle)
         hret = margo_bulk_create(mid, num_keys, keys_addr.data(),
                 true_ksizes.data(), HG_BULK_READ_ONLY, &keys_local_bulk);
         if(hret != HG_SUCCESS) {
-            std::cerr << "Error: SDSKV list_keys could not create bulk handle (keys_local_bulk)" << std::endl;
+            margo_error(mid, "Error: SDSKV list_keys could not create bulk handle (keys_local_bulk)\n");
             throw (int)SDSKV_MAKE_HG_ERROR(hret);
         }
 
@@ -2179,7 +2179,7 @@ static void sdskv_list_keys_ult(hg_handle_t handle)
                 hret = margo_bulk_transfer(mid, HG_BULK_PUSH, origin_addr,
                         in.keys_bulk_handle, remote_offset, keys_local_bulk, local_offset, true_ksizes[i]);
                 if(hret != HG_SUCCESS) {
-                    std::cerr << "Error: SDSKV list_keys could not issue bulk transfer (keys_local_bulk)" << std::endl;
+                    margo_error(mid, "Error: SDSKV list_keys could not issue bulk transfer (keys_local_bulk)\n");
                     throw (int)SDSKV_MAKE_HG_ERROR(hret);
                 }
             }
@@ -2225,7 +2225,7 @@ static void sdskv_list_keyvals_ult(hg_handle_t handle)
     sdskv_provider_t svr_ctx = 
         (sdskv_provider_t)margo_registered_data(mid, info->id);
     if(!svr_ctx) {
-        std::cerr << "Error (sdskv_list_keyvals_ult): SDSKV list_keyvals could not find provider" << std::endl;
+        margo_error(mid, "Error (sdskv_list_keyvals_ult): SDSKV list_keyvals could not find provider\n");
         out.ret = SDSKV_ERR_UNKNOWN_PR;
         margo_respond(handle, &out);
         margo_destroy(handle);
@@ -2235,7 +2235,7 @@ static void sdskv_list_keyvals_ult(hg_handle_t handle)
     /* get the input */
     hret = margo_get_input(handle, &in);
     if(hret != HG_SUCCESS) {
-        std::cerr << "Error: SDSKV list_keyvals could not get RPC input" << std::endl;
+        margo_error(mid, "Error: SDSKV list_keyvals could not get RPC input\n");
         out.ret = SDSKV_MAKE_HG_ERROR(hret);
         margo_respond(handle, &out);
         margo_destroy(handle);
@@ -2248,7 +2248,7 @@ static void sdskv_list_keyvals_ult(hg_handle_t handle)
         ABT_rwlock_rdlock(svr_ctx->lock);
         auto it = svr_ctx->databases.find(in.db_id);
         if(it == svr_ctx->databases.end()) {
-            std::cerr << "Error: SDSKV list_keyvals could not get database with id " << in.db_id << std::endl;
+            margo_error(mid, "Error: SDSKV list_keyvals could not get database with id %ld\n", in.db_id);
             ABT_rwlock_unlock(svr_ctx->lock);
             throw (int)SDSKV_ERR_UNKNOWN_DB;
         }
@@ -2263,7 +2263,7 @@ static void sdskv_list_keyvals_ult(hg_handle_t handle)
         hret = margo_bulk_create(mid, 1, ksizes_addr.data(), 
                 &ksizes_bulk_size, HG_BULK_READWRITE, &ksizes_local_bulk);
         if(hret != HG_SUCCESS) {
-            std::cerr << "Error: SDSKV list_keyvals could not create bulk handle (ksizes_local_bulk)" << std::endl;
+            margo_error(mid, "Error: SDSKV list_keyvals could not create bulk handle (ksizes_local_bulk)\n");
             throw (int)SDSKV_MAKE_HG_ERROR(hret);
         }
 
@@ -2275,7 +2275,7 @@ static void sdskv_list_keyvals_ult(hg_handle_t handle)
         hret = margo_bulk_create(mid, 1, vsizes_addr.data(), 
                 &vsizes_bulk_size, HG_BULK_READWRITE, &vsizes_local_bulk);
         if(hret != HG_SUCCESS) {
-            std::cerr << "Error: SDSKV list_keyvals could not create bulk handle (vsizes_local_bulk)" << std::endl;
+            margo_error(mid, "Error: SDSKV list_keyvals could not create bulk handle (vsizes_local_bulk)\n");
             throw (int)SDSKV_MAKE_HG_ERROR(hret);
         }
 
@@ -2284,8 +2284,8 @@ static void sdskv_list_keyvals_ult(hg_handle_t handle)
         hret = margo_bulk_transfer(mid, HG_BULK_PULL, origin_addr,
                 in.ksizes_bulk_handle, 0, ksizes_local_bulk, 0, ksizes_bulk_size);
         if(hret != HG_SUCCESS) {
-            std::cerr << "Error: SDSKV list_keyvals could not issue bulk transfer " 
-                << "(pull from in.ksizes_bulk_handle to ksizes_local_bulk)" << std::endl;
+            margo_error(mid, "Error: SDSKV list_keyvals could not issue bulk transfer "
+                "(pull from in.ksizes_bulk_handle to ksizes_local_bulk)\n");
             throw (int)SDSKV_MAKE_HG_ERROR(hret);
         }
 
@@ -2293,8 +2293,8 @@ static void sdskv_list_keyvals_ult(hg_handle_t handle)
         hret = margo_bulk_transfer(mid, HG_BULK_PULL, origin_addr,
                 in.vsizes_bulk_handle, 0, vsizes_local_bulk, 0, vsizes_bulk_size);
         if(hret != HG_SUCCESS) {
-            std::cerr << "Error: SDSKV list_keyvals could not issue bulk transfer " 
-                << "(pull from in.vsizes_bulk_handle to vsizes_local_bulk)" << std::endl;
+            margo_error(mid, "Error: SDSKV list_keyvals could not issue bulk transfer "
+                "(pull from in.vsizes_bulk_handle to vsizes_local_bulk)\n");
             throw (int)SDSKV_MAKE_HG_ERROR(hret);
         }
 
@@ -2347,8 +2347,8 @@ static void sdskv_list_keyvals_ult(hg_handle_t handle)
             hret = margo_bulk_transfer(mid, HG_BULK_PUSH, origin_addr, 
                 in.ksizes_bulk_handle, 0, ksizes_local_bulk, 0, ksizes_bulk_size);
             if(hret != HG_SUCCESS) {
-                std::cerr << "Error: SDSKV list_keyvals could not issue bulk transfer "
-                    << "(push from ksizes_local_bulk to in.ksizes_bulk_handle)" << std::endl;
+                margo_error(mid, "Error: SDSKV list_keyvals could not issue bulk transfer "
+                    "(push from ksizes_local_bulk to in.ksizes_bulk_handle)\n");
                 throw (int)SDSKV_MAKE_HG_ERROR(hret);
             }
         }
@@ -2358,8 +2358,8 @@ static void sdskv_list_keyvals_ult(hg_handle_t handle)
             hret = margo_bulk_transfer(mid, HG_BULK_PUSH, origin_addr, 
                 in.vsizes_bulk_handle, 0, vsizes_local_bulk, 0, vsizes_bulk_size);
             if(hret != HG_SUCCESS) {
-                std::cerr << "Error: SDSKV list_keyvals could not issue bulk transfer "
-                    << "(push from vsizes_local_bulk to in.vsizes_bulk_handle)" << std::endl;
+                margo_error(mid, "Error: SDSKV list_keyvals could not issue bulk transfer "
+                    "(push from vsizes_local_bulk to in.vsizes_bulk_handle)\n");
                 throw (int)SDSKV_MAKE_HG_ERROR(hret);
             }
         }
@@ -2383,7 +2383,7 @@ static void sdskv_list_keyvals_ult(hg_handle_t handle)
         hret = margo_bulk_create(mid, num_keys, keys_addr.data(),
                 true_ksizes.data(), HG_BULK_READ_ONLY, &keys_local_bulk);
         if(hret != HG_SUCCESS) {
-            std::cerr << "Error: SDSKV list_keyvals could not create bulk handle (keys_local_bulk)" << std::endl;
+            margo_error(mid, "Error: SDSKV list_keyvals could not create bulk handle (keys_local_bulk)\n");
             throw (int)SDSKV_MAKE_HG_ERROR(hret);
         }
 
@@ -2391,7 +2391,7 @@ static void sdskv_list_keyvals_ult(hg_handle_t handle)
         hret = margo_bulk_create(mid, num_keys, vals_addr.data(),
                 true_vsizes.data(), HG_BULK_READ_ONLY, &vals_local_bulk);
         if(hret != HG_SUCCESS) {
-            std::cerr << "Error: SDSKV list_keyvals could not create bulk handle (vals_local_bulk)" << std::endl;
+            margo_error(mid, "Error: SDSKV list_keyvals could not create bulk handle (vals_local_bulk)\n");
             throw (int)SDSKV_MAKE_HG_ERROR(hret);
         }
 
@@ -2405,7 +2405,7 @@ static void sdskv_list_keyvals_ult(hg_handle_t handle)
                 hret = margo_bulk_transfer(mid, HG_BULK_PUSH, origin_addr,
                         in.keys_bulk_handle, remote_offset, keys_local_bulk, local_offset, true_ksizes[i]);
                 if(hret != HG_SUCCESS) {
-                    std::cerr << "Error: SDSKV list_keyvals could not issue bulk transfer (keys_local_bulk)" << std::endl;
+                    margo_error(mid, "Error: SDSKV list_keyvals could not issue bulk transfer (keys_local_bulk)\n");
                     throw (int)SDSKV_MAKE_HG_ERROR(hret);
                 }
             }
@@ -2422,7 +2422,7 @@ static void sdskv_list_keyvals_ult(hg_handle_t handle)
                 hret = margo_bulk_transfer(mid, HG_BULK_PUSH, origin_addr,
                         in.vals_bulk_handle, remote_offset, vals_local_bulk, local_offset, true_vsizes[i]);
                 if(hret != HG_SUCCESS) {
-                    std::cerr << "Error: SDSKV list_keyvals could not issue bulk transfer (vals_local_bulk)" << std::endl;
+                    margo_error(mid, "Error: SDSKV list_keyvals could not issue bulk transfer (vals_local_bulk)\n");
                     throw (int)SDSKV_MAKE_HG_ERROR(hret);
                 }
             }
