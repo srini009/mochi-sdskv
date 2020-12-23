@@ -16,6 +16,8 @@
 #include "sdskv-rpc-types.h"
 #include "sdskv-server.h"
 
+#include <json-c/json.h>
+
 struct sdskv_server_context_t
 {
     margo_instance_id mid;
@@ -118,10 +120,27 @@ extern "C" int sdskv_provider_register(
         margo_instance_id mid,
         uint16_t provider_id,
         ABT_pool abt_pool,
+        const char *json_config,
         sdskv_provider_t* provider)
 {
     sdskv_server_context_t *tmp_svr_ctx;
     int ret;
+    struct json_object *config = NULL;
+
+    if (json_config) {
+        struct json_tokener* tokener = json_tokener_new();
+        enum json_tokener_error jerr;
+        config = json_tokener_parse_ex(tokener, json_config,
+                strlen(json_config));
+        if (!config) {
+            jerr = json_tokener_get_error(tokener);
+            json_tokener_free(tokener);
+            return SDSKV_ERR_CONFIG;
+        }
+        json_tokener_free(tokener);
+    } else {
+        config = json_object_new_object();
+    }
 
     /* check if a provider with the same multiplex id already exists */
     {
@@ -353,6 +372,11 @@ extern "C" int sdskv_provider_register(
         *provider = tmp_svr_ctx;
 
     return SDSKV_SUCCESS;
+}
+
+extern "C" char * sdskv_provider_get_config(sdskv_provider_t provider)
+{
+    return( margo_get_config(provider->mid));
 }
 
 extern "C" int sdskv_provider_destroy(sdskv_provider_t provider)

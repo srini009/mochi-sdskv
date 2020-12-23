@@ -172,6 +172,7 @@ int main(int argc, char **argv)
             sdskv_provider_t provider;
             ret = sdskv_provider_register(mid, i+1,
                     SDSKV_ABT_POOL_DEFAULT,
+                    NULL,
                     &provider);
 
             if(ret != 0)
@@ -215,6 +216,7 @@ int main(int argc, char **argv)
         sdskv_provider_t provider;
         ret = sdskv_provider_register(mid, 1,
                 SDSKV_ABT_POOL_DEFAULT,
+                NULL,
                 &provider);
 
         if(ret != 0)

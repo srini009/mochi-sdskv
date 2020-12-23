@@ -45,6 +45,7 @@ typedef uint64_t sdskv_database_id_t;
     X(SDSKV_ERR_COMP_FUNC,   "Invalid comparison function")       \
     X(SDSKV_ERR_REMI,        "REMI error")                        \
     X(SDSKV_ERR_KEYEXISTS,   "Key exists")                        \
+    X(SDSKV_ERR_CONFIG,      "Bad configuration")                 \
     X(SDSKV_ERR_MAX,         "End of range for valid error codes")
 
 #define X(__err__, __msg__) __err__,

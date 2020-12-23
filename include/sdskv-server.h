@@ -42,6 +42,7 @@ typedef void (*sdskv_post_migration_callback_fn)(sdskv_provider_t, const sdskv_c
  * @param[in] mid Margo instance
  * @param[in] provider_id provider id
  * @param[in] pool Argobots pool
+ * @param[in] json_config Json string
  * @param[out] provider provider handle
  *
  * @return SDSKV_SUCCESS or error code defined in sdskv-common.h
@@ -50,8 +51,14 @@ int sdskv_provider_register(
         margo_instance_id mid,
         uint16_t provider_id,
         ABT_pool pool,
+        const char *json_config,
         sdskv_provider_t* provider);
 
+/**
+ * @brief Obtain a JSON string describing provider's configuration
+ *
+ */
+char * sdskv_provider_get_json(sdskv_provider_t provider);
 /**
  * @brief Deregister the provider's RPCs and destroys the provider.
  *
