@@ -159,7 +159,7 @@ int sdskv_client_finalize(sdskv_client_t client)
 {
     if(client->num_provider_handles != 0) {
         fprintf(stderr,
-                "[SDSKV] Warning: %d provider handles not released before sdskv_client_finalize was called\n",
+                "[SDSKV] Warning: %lu provider handles not released before sdskv_client_finalize was called\n",
                 client->num_provider_handles);
     }
     free(client);
