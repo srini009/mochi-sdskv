@@ -127,9 +127,9 @@ if test "x${with_berkeleydb}" != "x" ; then
 	CXXFLAGS="$CXXFLAGS -I${with_berkeleydb}/include"
 #LIBS="$LIBS -L${with_berkeleydb}/lib/ -ldb_cxx -ldb_stl"
 	AC_CHECK_HEADERS([db_cxx.h], ,
-			AC_ERROR("Could not find Berkely DB C++ headers"))
+			AC_MSG_ERROR("Could not find Berkely DB C++ headers"))
 	AC_CHECK_HEADERS([dbstl_map.h],,
-			AC_ERROR("Could not find Berkely DB STL headers"))
+			AC_MSG_ERROR("Could not find Berkely DB STL headers"))
 	AC_DEFINE([USE_BDB], 1, [Use Berkely DB backend])
 	SERVER_LIBS_EXT="${SERVER_LIBS_EXT} -L${with_berkeleydb}/lib -ldb_cxx -ldb_stl"
 	AC_LANG_POP
@@ -146,7 +146,7 @@ if test "x${leveldb_backend}" == xyes ; then
         ], [
             # fall back to conventional tests if no pkgconfig
             AC_CHECK_HEADERS([leveldb/c.h], ,
-                             AC_ERROR("Could not find leveldb headers"))
+                             AC_MSG_ERROR("Could not find leveldb headers"))
             AC_DEFINE([USE_LEVELDB], 1, [use leveldb backend])
 	    SERVER_LIBS_EXT="${SERVER_LIBS_EXT} -lleveldb"
         ])
