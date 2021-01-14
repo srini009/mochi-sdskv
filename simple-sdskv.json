@@ -1,0 +1,14 @@
+{
+    "libraries" : {
+        "sdskv" : "libsdskv-bedrock.so"
+    },
+    "providers" : [
+        {
+            "name" : "my_sdskv_provider",
+            "type" : "sdskv",
+            "provider_id" : 42,
+            "config" : {},
+            "pool" : "__primary__"
+        }
+    ]
+}
