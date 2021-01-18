@@ -16,6 +16,8 @@
 #include "sdskv-rpc-types.h"
 #include "sdskv-server.h"
 
+#include <dlfcn.h>
+
 #include <json-c/json.h>
 
 struct sdskv_server_context_t
@@ -398,6 +400,21 @@ extern "C" int sdskv_provider_add_comparison_function(
     return SDSKV_SUCCESS;
 }
 
+extern "C" int sdskv_provider_find_comparison_function(
+        sdskv_provider_t provider,
+        const char* library,
+        const char* function_name)
+{
+    void *handle = dlopen(library, RTLD_NOW);
+    if (handle == NULL)
+        return SDSKV_ERR_COMP_FUNC;
+    sdskv_compare_fn *comp_fn = (sdskv_compare_fn*)dlsym(handle, function_name);
+    if (comp_fn == NULL)
+        return SDSKV_ERR_COMP_FUNC;
+    provider->compfunctions[std::string(function_name)] = *comp_fn;
+
+    return SDSKV_SUCCESS;
+}
 extern "C" int sdskv_provider_attach_database(
         sdskv_provider_t provider,
         const sdskv_config_t* config,

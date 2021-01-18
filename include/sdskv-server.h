@@ -83,6 +83,19 @@ int sdskv_provider_add_comparison_function(
         sdskv_compare_fn comp_fn);
 
 /**
+ * @brief
+ * @pram provider provider
+ * @pram library dynamically loaded library containing comparison function
+ * @param function_name name of function to load from library
+ *
+ * @return SDSKV_SUCCES or error code defined in sdskv-common.h
+ */
+
+int sdskv_provider_find_comparison_function(
+        sdskv_provider_t provider,
+        const char* library,
+        const char* function_name);
+/**
  * Makes the provider start managing a database. The database will
  * be created if it does not exist. Otherwise, the provider will start
  * to manage the existing database.
