@@ -13,7 +13,12 @@ static int sdskv_register_provider(
     const char* name      = bedrock_args_get_name(args);
 
 
-    if (sdskv_provider_register(mid, provider_id, pool, config, (sdskv_provider_t*)provider) == SDSKV_SUCCESS)
+    margo_trace(mid, "Executing %s", __func__);
+    struct sdskv_provider_init_info sdskv_args = SDSKV_PROVIDER_INIT_INFO_INIT;
+    sdskv_args.rpc_pool = pool;
+    sdskv_args.json_config = config;
+
+    if (sdskv_provider_register(mid, provider_id, &sdskv_args, (sdskv_provider_t*)provider) == SDSKV_SUCCESS)
         return BEDROCK_SUCCESS;
     return -1;
 }
@@ -21,6 +26,7 @@ static int sdskv_register_provider(
 static int sdskv_deregister_provider(
         bedrock_module_provider_t provider)
 {
+    margo_trace(sdskv_provider_get_mid(provider), "Executing %s", __func__);
     if (sdskv_provider_destroy(provider) == SDSKV_SUCCESS)
         return BEDROCK_SUCCESS;
     return -1;
@@ -29,12 +35,14 @@ static int sdskv_deregister_provider(
 static char* sdskv_get_provider_config(
         bedrock_module_provider_t provider)
 {
+    margo_trace(sdskv_provider_get_mid(provider), "Executing %s", __func__);
     return NULL;
 }
 static int sdskv_init_client(
         margo_instance_id mid,
         bedrock_module_client_t * client)
 {
+    margo_trace(mid, "Executing %s", __func__);
     int ret = sdskv_client_init(mid, (sdskv_client_t*)client);
     if (ret == SDSKV_SUCCESS)
         return BEDROCK_SUCCESS;
@@ -44,6 +52,7 @@ static int sdskv_init_client(
 static int sdskv_finalize_client(
         bedrock_module_client_t client)
 {
+    margo_trace(sdskv_client_get_mid(client), "Executing %s", __func__);
     int ret = sdskv_client_finalize((sdskv_client_t)client);
     if (ret == SDSKV_SUCCESS)
         return BEDROCK_SUCCESS;
@@ -56,6 +65,7 @@ static int sdskv_create_provider_handle(
         uint16_t provider_id,
         bedrock_module_provider_handle_t* ph)
 {
+    margo_trace(sdskv_client_get_mid(client), "Executing %s", __func__);
     int ret = sdskv_provider_handle_create(client, address, provider_id, (sdskv_provider_handle_t*)ph);
     if (ret == SDSKV_SUCCESS)
         return BEDROCK_SUCCESS;
@@ -65,6 +75,12 @@ static int sdskv_create_provider_handle(
 static int sdskv_destroy_provider_handle(
         bedrock_module_provider_handle_t ph)
 {
+    sdskv_client_t client;
+    hg_addr_t addr;
+    uint16_t provider_id;
+
+    sdskv_provider_handle_get_info(ph, &client, &addr, &provider_id);
+    margo_trace(sdskv_client_get_mid(client), "Executing %s", __func__);
     int ret = sdskv_provider_handle_release((sdskv_provider_handle_t) ph);
     if (ret == SDSKV_SUCCESS)
         return BEDROCK_SUCCESS;

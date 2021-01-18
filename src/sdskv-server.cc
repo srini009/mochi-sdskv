@@ -381,6 +381,11 @@ extern "C" char * sdskv_provider_get_config(sdskv_provider_t provider)
     return( margo_get_config(provider->mid));
 }
 
+extern "C" margo_instance_id sdskv_provider_get_mid(sdskv_provider_t provider)
+{
+    return (provider->mid);
+}
+
 extern "C" int sdskv_provider_destroy(sdskv_provider_t provider)
 {
     margo_provider_pop_finalize_callback(provider->mid, provider);

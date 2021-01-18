@@ -41,6 +41,12 @@ int sdskv_client_init(margo_instance_id mid, sdskv_client_t* client);
 int sdskv_client_finalize(sdskv_client_t client);
 
 /**
+ * @brief accessor for client margo identifider
+ *
+ * @return Margo ID
+ */
+margo_instance_id sdskv_client_get_mid(sdskv_client_t client);
+/**
  * @brief Creates a SDSKV provider handle.
  *
  * @param[in] client SDSKV client responsible for the provider handle

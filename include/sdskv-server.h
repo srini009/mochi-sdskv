@@ -59,6 +59,11 @@ int sdskv_provider_register(
  *
  */
 char * sdskv_provider_get_json(sdskv_provider_t provider);
+
+/**
+ * @brief Obtain underlying margo identifier
+ */
+margo_instance_id sdskv_provider_get_mid(sdskv_provider_t provider);
 /**
  * @brief Deregister the provider's RPCs and destroys the provider.
  *

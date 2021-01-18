@@ -166,6 +166,11 @@ int sdskv_client_finalize(sdskv_client_t client)
     return SDSKV_SUCCESS;
 }
 
+margo_instance_id sdskv_client_get_mid(sdskv_client_t client)
+{
+    return client->mid;
+}
+
 int sdskv_provider_handle_create(
         sdskv_client_t client,
         hg_addr_t addr,
