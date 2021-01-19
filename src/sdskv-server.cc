@@ -70,6 +70,8 @@ struct sdskv_server_context_t
     hg_id_t sdskv_migrate_keys_prefixed_id;
     hg_id_t sdskv_migrate_all_keys_id;
     hg_id_t sdskv_migrate_database_id;
+
+    struct json_object * json_cfg;
 };
 
 template<typename F>
@@ -127,8 +129,7 @@ static validate_and_complete_config(json_object *config)
 extern "C" int sdskv_provider_register(
         margo_instance_id mid,
         uint16_t provider_id,
-        ABT_pool abt_pool,
-        const char *json_config,
+        const struct sdskv_provider_init_info * args,
         sdskv_provider_t* provider)
 {
     sdskv_server_context_t *tmp_svr_ctx;
@@ -149,8 +150,8 @@ extern "C" int sdskv_provider_register(
     if (args->json_config) {
         struct json_tokener* tokener = json_tokener_new();
         enum json_tokener_error jerr;
-        config = json_tokener_parse_ex(tokener, json_config,
-                strlen(json_config));
+        config = json_tokener_parse_ex(tokener, args->json_config,
+                strlen(args->json_config));
         if (!config) {
             jerr = json_tokener_get_error(tokener);
             margo_error(mid, "JSON parse error: %s", json_tokener_error_desc(jerr));
@@ -192,152 +193,152 @@ extern "C" int sdskv_provider_register(
     hg_id_t rpc_id;
     rpc_id = MARGO_REGISTER_PROVIDER(mid, "sdskv_open_rpc",
             open_in_t, open_out_t,
-            sdskv_open_ult, provider_id, abt_pool);
+            sdskv_open_ult, provider_id, args->rpc_pool);
     tmp_svr_ctx->sdskv_open_id = rpc_id;
     margo_register_data(mid, rpc_id, (void*)tmp_svr_ctx, NULL);
 
     rpc_id = MARGO_REGISTER_PROVIDER(mid, "sdskv_count_databases_rpc",
             void, count_db_out_t,
-            sdskv_count_db_ult, provider_id, abt_pool);
+            sdskv_count_db_ult, provider_id, args->rpc_pool);
     tmp_svr_ctx->sdskv_count_databases_id = rpc_id;
     margo_register_data(mid, rpc_id, (void*)tmp_svr_ctx, NULL);
 
     rpc_id = MARGO_REGISTER_PROVIDER(mid, "sdskv_list_databases_rpc",
             list_db_in_t, list_db_out_t,
-            sdskv_list_db_ult, provider_id, abt_pool);
+            sdskv_list_db_ult, provider_id, args->rpc_pool);
     tmp_svr_ctx->sdskv_list_databases_id = rpc_id;
     margo_register_data(mid, rpc_id, (void*)tmp_svr_ctx, NULL);
 
     rpc_id = MARGO_REGISTER_PROVIDER(mid, "sdskv_put_rpc",
             put_in_t, put_out_t,
-            sdskv_put_ult, provider_id, abt_pool);
+            sdskv_put_ult, provider_id, args->rpc_pool);
     tmp_svr_ctx->sdskv_put_id = rpc_id;
     margo_register_data(mid, rpc_id, (void*)tmp_svr_ctx, NULL);
 
     rpc_id = MARGO_REGISTER_PROVIDER(mid, "sdskv_put_multi_rpc",
             put_multi_in_t, put_multi_out_t,
-            sdskv_put_multi_ult, provider_id, abt_pool);
+            sdskv_put_multi_ult, provider_id, args->rpc_pool);
     tmp_svr_ctx->sdskv_put_multi_id = rpc_id;
     margo_register_data(mid, rpc_id, (void*)tmp_svr_ctx, NULL);
 
     rpc_id = MARGO_REGISTER_PROVIDER(mid, "sdskv_put_packed_rpc",
             put_packed_in_t, put_packed_out_t,
-            sdskv_put_packed_ult, provider_id, abt_pool);
+            sdskv_put_packed_ult, provider_id, args->rpc_pool);
     tmp_svr_ctx->sdskv_put_packed_id = rpc_id;
     margo_register_data(mid, rpc_id, (void*)tmp_svr_ctx, NULL);
 
     rpc_id = MARGO_REGISTER_PROVIDER(mid, "sdskv_bulk_put_rpc",
             bulk_put_in_t, bulk_put_out_t,
-            sdskv_bulk_put_ult, provider_id, abt_pool);
+            sdskv_bulk_put_ult, provider_id, args->rpc_pool);
     tmp_svr_ctx->sdskv_bulk_put_id = rpc_id;
     margo_register_data(mid, rpc_id, (void*)tmp_svr_ctx, NULL);
 
     rpc_id = MARGO_REGISTER_PROVIDER(mid, "sdskv_get_rpc",
             get_in_t, get_out_t,
-            sdskv_get_ult, provider_id, abt_pool);
+            sdskv_get_ult, provider_id, args->rpc_pool);
     tmp_svr_ctx->sdskv_get_id = rpc_id;
     margo_register_data(mid, rpc_id, (void*)tmp_svr_ctx, NULL);
 
     rpc_id = MARGO_REGISTER_PROVIDER(mid, "sdskv_get_multi_rpc",
             get_multi_in_t, get_multi_out_t,
-            sdskv_get_multi_ult, provider_id, abt_pool);
+            sdskv_get_multi_ult, provider_id, args->rpc_pool);
     tmp_svr_ctx->sdskv_get_multi_id = rpc_id;
     margo_register_data(mid, rpc_id, (void*)tmp_svr_ctx, NULL);
 
     rpc_id = MARGO_REGISTER_PROVIDER(mid, "sdskv_get_packed_rpc",
             get_packed_in_t, get_packed_out_t,
-            sdskv_get_packed_ult, provider_id, abt_pool);
+            sdskv_get_packed_ult, provider_id, args->rpc_pool);
     tmp_svr_ctx->sdskv_get_packed_id = rpc_id;
     margo_register_data(mid, rpc_id, (void*)tmp_svr_ctx, NULL);
 
     rpc_id = MARGO_REGISTER_PROVIDER(mid, "sdskv_length_rpc",
             length_in_t, length_out_t,
-            sdskv_length_ult, provider_id, abt_pool);
+            sdskv_length_ult, provider_id, args->rpc_pool);
     tmp_svr_ctx->sdskv_length_id = rpc_id;
     margo_register_data(mid, rpc_id, (void*)tmp_svr_ctx, NULL);
 
     rpc_id = MARGO_REGISTER_PROVIDER(mid, "sdskv_length_multi_rpc",
             length_multi_in_t, length_multi_out_t,
-            sdskv_length_multi_ult, provider_id, abt_pool);
+            sdskv_length_multi_ult, provider_id, args->rpc_pool);
     tmp_svr_ctx->sdskv_length_multi_id = rpc_id;
     margo_register_data(mid, rpc_id, (void*)tmp_svr_ctx, NULL);
 
     rpc_id = MARGO_REGISTER_PROVIDER(mid, "sdskv_length_packed_rpc",
             length_packed_in_t, length_packed_out_t,
-            sdskv_length_packed_ult, provider_id, abt_pool);
+            sdskv_length_packed_ult, provider_id, args->rpc_pool);
     tmp_svr_ctx->sdskv_length_packed_id = rpc_id;
     margo_register_data(mid, rpc_id, (void*)tmp_svr_ctx, NULL);
 
     rpc_id = MARGO_REGISTER_PROVIDER(mid, "sdskv_exists_rpc",
             exists_in_t, exists_out_t,
-            sdskv_exists_ult, provider_id, abt_pool);
+            sdskv_exists_ult, provider_id, args->rpc_pool);
     tmp_svr_ctx->sdskv_exists_id = rpc_id;
     margo_register_data(mid, rpc_id, (void*)tmp_svr_ctx, NULL);
 
     rpc_id = MARGO_REGISTER_PROVIDER(mid, "sdskv_exists_multi_rpc",
             exists_multi_in_t, exists_multi_out_t,
-            sdskv_exists_multi_ult, provider_id, abt_pool);
+            sdskv_exists_multi_ult, provider_id, args->rpc_pool);
     tmp_svr_ctx->sdskv_exists_multi_id = rpc_id;
     margo_register_data(mid, rpc_id, (void*)tmp_svr_ctx, NULL);
 
     rpc_id = MARGO_REGISTER_PROVIDER(mid, "sdskv_bulk_get_rpc",
             bulk_get_in_t, bulk_get_out_t,
-            sdskv_bulk_get_ult, provider_id, abt_pool);
+            sdskv_bulk_get_ult, provider_id, args->rpc_pool);
     tmp_svr_ctx->sdskv_bulk_get_id = rpc_id;
     margo_register_data(mid, rpc_id, (void*)tmp_svr_ctx, NULL);
 
     rpc_id = MARGO_REGISTER_PROVIDER(mid, "sdskv_list_keys_rpc",
             list_keys_in_t, list_keys_out_t,
-            sdskv_list_keys_ult, provider_id, abt_pool);
+            sdskv_list_keys_ult, provider_id, args->rpc_pool);
     tmp_svr_ctx->sdskv_list_keys_id = rpc_id;
     margo_register_data(mid, rpc_id, (void*)tmp_svr_ctx, NULL);
 
     rpc_id = MARGO_REGISTER_PROVIDER(mid, "sdskv_list_keyvals_rpc",
             list_keyvals_in_t, list_keyvals_out_t,
-            sdskv_list_keyvals_ult, provider_id, abt_pool);
+            sdskv_list_keyvals_ult, provider_id, args->rpc_pool);
     tmp_svr_ctx->sdskv_list_keyvals_id = rpc_id;
     margo_register_data(mid, rpc_id, (void*)tmp_svr_ctx, NULL);
 
     rpc_id = MARGO_REGISTER_PROVIDER(mid, "sdskv_erase_rpc",
             erase_in_t, erase_out_t,
-            sdskv_erase_ult, provider_id, abt_pool);
+            sdskv_erase_ult, provider_id, args->rpc_pool);
     tmp_svr_ctx->sdskv_erase_id = rpc_id;
     margo_register_data(mid, rpc_id, (void*)tmp_svr_ctx, NULL);
 
     rpc_id = MARGO_REGISTER_PROVIDER(mid, "sdskv_erase_multi_rpc",
             erase_multi_in_t, erase_multi_out_t,
-            sdskv_erase_multi_ult, provider_id, abt_pool);
+            sdskv_erase_multi_ult, provider_id, args->rpc_pool);
     tmp_svr_ctx->sdskv_erase_multi_id = rpc_id;
     margo_register_data(mid, rpc_id, (void*)tmp_svr_ctx, NULL);
 
     /* migration RPC */
     rpc_id = MARGO_REGISTER_PROVIDER(mid, "sdskv_migrate_keys_rpc",
             migrate_keys_in_t, migrate_keys_out_t,
-            sdskv_migrate_keys_ult, provider_id, abt_pool);
+            sdskv_migrate_keys_ult, provider_id, args->rpc_pool);
     tmp_svr_ctx->sdskv_migrate_keys_id = rpc_id;
     margo_register_data(mid, rpc_id, (void*)tmp_svr_ctx, NULL);
 
     rpc_id = MARGO_REGISTER_PROVIDER(mid, "sdskv_migrate_key_range_rpc",
             migrate_key_range_in_t, migrate_keys_out_t,
-            sdskv_migrate_key_range_ult, provider_id, abt_pool);
+            sdskv_migrate_key_range_ult, provider_id, args->rpc_pool);
     tmp_svr_ctx->sdskv_migrate_key_range_id = rpc_id;
     margo_register_data(mid, rpc_id, (void*)tmp_svr_ctx, NULL);
 
     rpc_id = MARGO_REGISTER_PROVIDER(mid, "sdskv_migrate_keys_prefixed_rpc",
             migrate_keys_prefixed_in_t, migrate_keys_out_t,
-            sdskv_migrate_keys_prefixed_ult, provider_id, abt_pool);
+            sdskv_migrate_keys_prefixed_ult, provider_id, args->rpc_pool);
     tmp_svr_ctx->sdskv_migrate_keys_prefixed_id = rpc_id;
     margo_register_data(mid, rpc_id, (void*)tmp_svr_ctx, NULL);
 
     rpc_id = MARGO_REGISTER_PROVIDER(mid, "sdskv_migrate_all_keys_rpc",
             migrate_all_keys_in_t, migrate_keys_out_t,
-            sdskv_migrate_all_keys_ult, provider_id, abt_pool);
+            sdskv_migrate_all_keys_ult, provider_id, args->rpc_pool);
     tmp_svr_ctx->sdskv_migrate_all_keys_id = rpc_id;
     margo_register_data(mid, rpc_id, (void*)tmp_svr_ctx, NULL);
 
     rpc_id = MARGO_REGISTER_PROVIDER(mid, "sdskv_migrate_database_rpc",
             migrate_database_in_t, migrate_database_out_t,
-            sdskv_migrate_database_ult, provider_id, abt_pool);
+            sdskv_migrate_database_ult, provider_id, args->rpc_pool);
     tmp_svr_ctx->sdskv_migrate_database_id = rpc_id;
     margo_register_data(mid, rpc_id, (void*)tmp_svr_ctx, NULL);
 
@@ -359,7 +360,7 @@ extern "C" int sdskv_provider_register(
             tmp_svr_ctx->owns_remi_provider = 0;
         } else {
             /* register a REMI provider because it does not exist */
-            ret = remi_provider_register(mid, ABT_IO_INSTANCE_NULL, provider_id, abt_pool, &(tmp_svr_ctx->remi_provider));
+            ret = remi_provider_register(mid, ABT_IO_INSTANCE_NULL, provider_id, args->rpc_pool, &(tmp_svr_ctx->remi_provider));
             if(ret != REMI_SUCCESS) {
                 sdskv_server_finalize_cb(tmp_svr_ctx);
                 return SDSKV_ERR_REMI;

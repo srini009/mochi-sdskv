@@ -36,6 +36,17 @@ typedef struct sdskv_config_t {
 typedef void (*sdskv_pre_migration_callback_fn)(sdskv_provider_t, const sdskv_config_t*, void*);
 typedef void (*sdskv_post_migration_callback_fn)(sdskv_provider_t, const sdskv_config_t*, sdskv_database_id_t, void*);
 
+
+/**
+ * The bake_provider_init_info structure can be passed in to the
+ * bake_provider_register() function to configure the provider. The struct
+ * can be memset to zero to use default values.
+ */
+struct sdskv_provider_init_info {
+    const char *json_config;
+    ABT_pool    rpc_pool;
+};
+#define SDSKV_PROVIDER_INIT_INFO_INIT {NULL, ABT_POOL_NULL}
 /**
  * @brief Creates a new provider.
  *
@@ -50,15 +61,14 @@ typedef void (*sdskv_post_migration_callback_fn)(sdskv_provider_t, const sdskv_c
 int sdskv_provider_register(
         margo_instance_id mid,
         uint16_t provider_id,
-        ABT_pool pool,
-        const char *json_config,
+        const struct sdskv_provider_init_info * args,
         sdskv_provider_t* provider);
 
 /**
  * @brief Obtain a JSON string describing provider's configuration
  *
  */
-char * sdskv_provider_get_json(sdskv_provider_t provider);
+char * sdskv_provider_get_config(sdskv_provider_t provider);
 
 /**
  * @brief Obtain underlying margo identifier
