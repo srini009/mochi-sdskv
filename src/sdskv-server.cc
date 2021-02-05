@@ -122,8 +122,10 @@ static int sdskv_post_migration_callback(remi_fileset_t fileset, void* uargs);
 
 #endif
 
-static validate_and_complete_config(json_object *config)
+static void validate_and_complete_config(json_object *config)
 {
+    /* TODO: fill in json processing */
+    return;
 }
 
 extern "C" int sdskv_provider_register(
