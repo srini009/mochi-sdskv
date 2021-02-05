@@ -7,7 +7,19 @@
             "name" : "my_sdskv_provider",
             "type" : "sdskv",
             "provider_id" : 42,
-            "config" : {},
+            "config" : {
+                "databases" : {
+                    "name" : "sdskv-test-db",
+                    "db_type" : "map"
+                },
+                {
+                    "name" : "sdskv-test2-db",
+                    "db_type" : "leveldb",
+                    "comparator" : { "library" : "libsomething.so",
+                                      "name" : "my_comparator"
+                    }
+                },
+                "mode" : "databases",
             "pool" : "__primary__"
         }
     ]

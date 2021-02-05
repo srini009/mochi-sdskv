@@ -20,6 +20,8 @@
 
 #include <json-c/json.h>
 
+#include "sdskv-macros.h"
+
 struct sdskv_server_context_t
 {
     margo_instance_id mid;
@@ -118,6 +120,10 @@ static int sdskv_post_migration_callback(remi_fileset_t fileset, void* uargs);
 
 #endif
 
+static validate_and_complete_config(json_object *config)
+{
+}
+
 extern "C" int sdskv_provider_register(
         margo_instance_id mid,
         uint16_t provider_id,
@@ -128,21 +134,6 @@ extern "C" int sdskv_provider_register(
     sdskv_server_context_t *tmp_svr_ctx;
     int ret;
     struct json_object *config = NULL;
-
-    if (json_config) {
-        struct json_tokener* tokener = json_tokener_new();
-        enum json_tokener_error jerr;
-        config = json_tokener_parse_ex(tokener, json_config,
-                strlen(json_config));
-        if (!config) {
-            jerr = json_tokener_get_error(tokener);
-            json_tokener_free(tokener);
-            return SDSKV_ERR_CONFIG;
-        }
-        json_tokener_free(tokener);
-    } else {
-        config = json_object_new_object();
-    }
 
     /* check if a provider with the same multiplex id already exists */
     {
@@ -155,6 +146,24 @@ extern "C" int sdskv_provider_register(
         }
     }
 
+    if (args->json_config) {
+        struct json_tokener* tokener = json_tokener_new();
+        enum json_tokener_error jerr;
+        config = json_tokener_parse_ex(tokener, json_config,
+                strlen(json_config));
+        if (!config) {
+            jerr = json_tokener_get_error(tokener);
+            margo_error(mid, "JSON parse error: %s", json_tokener_error_desc(jerr));
+            json_tokener_free(tokener);
+            return SDSKV_ERR_CONFIG;
+        }
+        json_tokener_free(tokener);
+    } else {
+        config = json_object_new_object();
+    }
+
+    /* validate provided json, filling in default values where none prior exist */
+    validate_and_complete_config(config);
 
     /* allocate the resulting structure */    
     tmp_svr_ctx = new sdskv_server_context_t;
