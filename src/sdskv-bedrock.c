@@ -39,11 +39,11 @@ static char* sdskv_get_provider_config(
     return NULL;
 }
 static int sdskv_init_client(
-        margo_instance_id mid,
+        bedrock_args_t args,
         bedrock_module_client_t * client)
 {
-    margo_trace(mid, "Executing %s", __func__);
-    int ret = sdskv_client_init(mid, (sdskv_client_t*)client);
+    margo_trace(bedrock_args_get_margo_instance(args), "Executing %s", __func__);
+    int ret = sdskv_client_init(bedrock_args_get_margo_instance(args), (sdskv_client_t*)client);
     if (ret == SDSKV_SUCCESS)
         return BEDROCK_SUCCESS;
     return ret;
@@ -95,7 +95,8 @@ static struct bedrock_module sdskv = {
     .finalize_client         = sdskv_finalize_client,
     .create_provider_handle  = sdskv_create_provider_handle,
     .destroy_provider_handle = sdskv_destroy_provider_handle,
-    .dependencies            = NULL
+    .client_dependencies     = NULL,
+    .provider_dependencies   = NULL
 };
 
 BEDROCK_REGISTER_MODULE(sdskv, sdskv);
