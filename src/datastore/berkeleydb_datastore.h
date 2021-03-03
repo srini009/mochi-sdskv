@@ -14,12 +14,16 @@ class BerkeleyDBDataStore : public AbstractDataStore {
 
     private:
         struct DbWrapper {
-            Db _db;
+            Db *_db;
             AbstractDataStore::comparator_fn _less;
 
             template<typename ... T>
             DbWrapper(T&&... args) :
-            _db(std::forward<T>(args)...), _less(nullptr) {}
+            _db(new Db(std::forward<T>(args)...)), _less(nullptr) {}
+
+            ~DbWrapper() {
+                delete _db;
+            }
         };
 
         static int compkeys(Db *db, const Dbt *dbt1, const Dbt *dbt2, hg_size_t *locp);

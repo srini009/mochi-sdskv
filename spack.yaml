@@ -1,6 +1,8 @@
 spack:
   specs:
   - jsoncpp
+  - json-c
+  - mochi-bedrock
   - mpich
   - mochi-margo
   - mochi-abt-io

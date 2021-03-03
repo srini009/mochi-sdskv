@@ -100,7 +100,7 @@ bool BerkeleyDBDataStore::openDatabase(const std::string& db_name, const std::st
   
   if (status == 0) {
     _wrapper = new DbWrapper(_dbenv, DB_CXX_NO_EXCEPTIONS);
-    _dbm = &(_wrapper->_db);
+    _dbm = _wrapper->_db;
 
     _dbm->set_bt_compare(&(BerkeleyDBDataStore::compkeys));
   
