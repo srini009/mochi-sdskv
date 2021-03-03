@@ -23,13 +23,18 @@ class provider {
      * @param mid Margo instance.
      * @param provider_id Provider id.
      * @param pool Argobots pool.
+     * @param config JSON configuration.
      */
     provider(margo_instance_id mid,
              uint16_t provider_id = 0,
-             ABT_pool pool = SDSKV_ABT_POOL_DEFAULT)
+             ABT_pool pool = SDSKV_ABT_POOL_DEFAULT,
+             const std::string& config = std::string())
     : m_mid(mid)
     {
-        int ret = sdskv_provider_register(mid, provider_id, pool, &m_provider);
+        sdskv_provider_init_info args;
+        args.json_config = config.empty() ? nullptr : config.c_str();
+        args.rpc_pool = pool;
+        int ret = sdskv_provider_register(mid, provider_id, &args, &m_provider);
         _CHECK_RET(ret);
     }
 
@@ -47,14 +52,16 @@ class provider {
      * @param mid Margo instance.
      * @param provider_id Provider id.
      * @param pool Argobots pool.
+     * @param config JSON configuration.
      *
      * @return Pointer to a newly allocated provider.
      */
     static provider* create(margo_instance_id mid,
                             uint16_t provider_id = 0,
-                            ABT_pool pool = SDSKV_ABT_POOL_DEFAULT)
+                            ABT_pool pool = SDSKV_ABT_POOL_DEFAULT,
+                            const std::string& config = std::string())
     {
-        auto p = new provider(mid, provider_id, pool);
+        auto p = new provider(mid, provider_id, pool, config);
         margo_provider_push_finalize_callback(mid, p, &finalize_callback, p);
         return p;
     }
