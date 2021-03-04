@@ -7,6 +7,6 @@ Name: sdskv-server
 Description: services-based keyval server
 Version: 0.1.10
 URL: https://xgitlab.cels.anl.gov/sds/sds-keyval
-Requires: margo abt-io @SERVER_DEPS_PKG@
+Requires: margo abt-io jsoncpp @SERVER_DEPS_PKG@
 Libs: -L${libdir} -lsdskv-server @SERVER_LIBS_EXT@
 Cflags: -I${includedir}

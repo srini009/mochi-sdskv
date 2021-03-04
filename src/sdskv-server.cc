@@ -1,12 +1,13 @@
 /*
  * (C) 2015 The University of Chicago
- * 
+ *
  * See COPYRIGHT in top-level directory.
  */
 #include "kv-config.h"
 #include <map>
 #include <iostream>
 #include <unordered_map>
+#include <unordered_set>
 #ifdef USE_REMI
 #include <remi/remi-client.h>
 #include <remi/remi-server.h>
@@ -18,9 +19,7 @@
 
 #include <dlfcn.h>
 
-#include <json-c/json.h>
-
-#include "sdskv-macros.h"
+#include <json/json.h>
 
 struct sdskv_server_context_t
 {
@@ -71,7 +70,7 @@ struct sdskv_server_context_t
     hg_id_t sdskv_migrate_all_keys_id;
     hg_id_t sdskv_migrate_database_id;
 
-    struct json_object * json_cfg;
+    Json::Value json_cfg;
 };
 
 template<typename F>
@@ -122,10 +121,140 @@ static int sdskv_post_migration_callback(remi_fileset_t fileset, void* uargs);
 
 #endif
 
-static void validate_and_complete_config(json_object *config)
+static int validate_and_complete_config(margo_instance_id mid, Json::Value& config)
 {
-    /* TODO: fill in json processing */
-    return;
+    /**
+     * JSON config must have the following format:
+     * {
+     *    "comparators" : [
+     *       { "name" : "<name>", "library" : "<library> (optional)" },
+     *       ...
+     *    ],
+     *    "databases" : [
+     *       { "name" : "<database-name>",         (required)
+     *         "type" : "<database-type>",         (required)
+     *         "path" : "<database-path>",         (required for some backends)
+     *         "comparator" : "<comparator-name>", (optional, default to "")
+     *         "no_overwrite" : true/false         (optional, default to false)
+     *       },
+     *       ...
+     *    ]
+     * }
+     **/
+    if(config.isNull()) {
+        config = Json::Value(Json::objectValue);
+    }
+    // validate comparators
+    if(config.isMember("comparators")) {
+        if(!config["comparators"].isArray()) {
+            margo_error(mid, "SDSKV config: \"comparators\" field should be an array");
+            return SDSKV_ERR_CONFIG;
+        }
+    } else {
+        config["comparators"] = Json::Value(Json::arrayValue);
+    }
+    // check comparators
+    auto& comparators = config["comparators"];
+    std::unordered_set<std::string> comparator_names;
+    for(auto it = comparators.begin(); it != comparators.end(); it++) {
+        if(!it->isObject()) {
+            margo_error(mid, "SDSKV config: \"comparators\" array should contain objects");
+            return SDSKV_ERR_CONFIG;
+        }
+        if(!it->isMember("name")) {
+            margo_error(mid, "SDSKV config: missing \"name\" field in comparator");
+            return SDSKV_ERR_CONFIG;
+        }
+        auto& name = (*it)["name"];
+        if(!name.isString()) {
+            margo_error(mid, "SDSKV config: comparator name should be a string");
+            return SDSKV_ERR_CONFIG;
+        }
+        if(name.asString().empty()) {
+            margo_error(mid, "SDSKV config: empty name in comparator");
+            return SDSKV_ERR_CONFIG;
+        }
+        if(!it->isMember("library")) {
+            (*it)["library"] = "";
+        }
+        auto& library = (*it)["library"];
+        if(!library.isString()) {
+            margo_error(mid, "SDSKV config: comparator library should be a string");
+            return SDSKV_ERR_CONFIG;
+        }
+        if(comparator_names.count(name.asString())) {
+            margo_error(mid, "SDSKV config: multiple comparators with name \"%s\"", name.asString().c_str());
+            return SDSKV_ERR_CONFIG;
+        } else {
+            comparator_names.insert(name.asString());
+        }
+    }
+    // validate databases
+    if(config.isMember("databases")) {
+        if(!config["databases"].isArray()) {
+            margo_error(mid, "SDSKV config: \"databases\" field should be an array");
+            return SDSKV_ERR_CONFIG;
+        }
+    } else {
+        config["databases"] = Json::Value(Json::arrayValue);
+    }
+    // check databases
+    auto& databases = config["databases"];
+    std::unordered_set<std::string> database_names;
+    for(auto it = databases.begin(); it != databases.end(); it++) {
+        auto& db = *it;
+        if(!db.isMember("name")) {
+            margo_error(mid, "SDSKV config: missing \"name\" field in database");
+            return SDSKV_ERR_CONFIG;
+        }
+        auto& name = db["name"];
+        if(!name.isString()) {
+            margo_error(mid, "SDSKV config: database name should be a string");
+            return SDSKV_ERR_CONFIG;
+        }
+        if(name.asString().empty()) {
+            margo_error(mid, "SDSKV config: database name is empty");
+            return SDSKV_ERR_CONFIG;
+        }
+        if(!db.isMember("type")) {
+            margo_error(mid, "SDSKV config: missing \"type\" field in database");
+            return SDSKV_ERR_CONFIG;
+        }
+        auto& type = db["type"];
+        if(!type.isString()) {
+            margo_error(mid, "SDSKV config: database type should be a string");
+            return SDSKV_ERR_CONFIG;
+        }
+        if(type.asString().empty()) {
+            margo_error(mid, "SDSKV config: database type is empty");
+            return SDSKV_ERR_CONFIG;
+        }
+        if(!db.isMember("path")) db["path"] = "";
+        if(!db.isMember("comparator")) db["comparator"] = "";
+        if(!db.isMember("no_overwrite")) db["no_overwrite"] = false;
+        auto& path = db["path"];
+        auto& comparator = db["comparator"];
+        auto& no_overwrite = db["no_overwrite"];
+        if(!path.isString()) {
+            margo_error(mid, "SDSKV config: database path should be a string");
+            return SDSKV_ERR_CONFIG;
+        }
+        if(!comparator.isString()) {
+            margo_error(mid, "SDSKV config: database comparator should be a string");
+            return SDSKV_ERR_CONFIG;
+        }
+        if(!no_overwrite.isBool()) {
+            margo_error(mid, "SDSKV config: no_overwrite field should be a boolean");
+            return SDSKV_ERR_CONFIG;
+        }
+        if(database_names.count(name.asString())) {
+            margo_error(mid, "SDSKV config: multiple databases with name \"%s\" found", name.asString().c_str());
+            return SDSKV_ERR_CONFIG;
+        } else {
+            database_names.insert(name.asString());
+        }
+    }
+    return SDSKV_SUCCESS;
 }
 
 extern "C" int sdskv_provider_register(
@@ -136,7 +265,17 @@ extern "C" int sdskv_provider_register(
 {
     sdskv_server_context_t *tmp_svr_ctx;
     int ret;
-    struct json_object *config = NULL;
+
+    Json::Value config;
+    if(args->json_config && args->json_config[0]) {
+        try {
+            std::stringstream ss(args->json_config);
+            ss >> config;
+        } catch(std::exception& ex) {
+            margo_error(mid, "JSON error: %s", ex.what());
+            return SDSKV_ERR_CONFIG;
+        }
+    }
 
     /* check if a provider with the same multiplex id already exists */
     {
@@ -149,26 +288,12 @@ extern "C" int sdskv_provider_register(
         }
     }
 
-    if (args->json_config) {
-        struct json_tokener* tokener = json_tokener_new();
-        enum json_tokener_error jerr;
-        config = json_tokener_parse_ex(tokener, args->json_config,
-                strlen(args->json_config));
-        if (!config) {
-            jerr = json_tokener_get_error(tokener);
-            margo_error(mid, "JSON parse error: %s", json_tokener_error_desc(jerr));
-            json_tokener_free(tokener);
-            return SDSKV_ERR_CONFIG;
-        }
-        json_tokener_free(tokener);
-    } else {
-        config = json_object_new_object();
-    }
-
     /* validate provided json, filling in default values where none prior exist */
-    validate_and_complete_config(config);
+    ret = validate_and_complete_config(mid, config);
+    if(ret != SDSKV_SUCCESS)
+        return ret;
 
-    /* allocate the resulting structure */    
+    /* allocate the resulting structure */
     tmp_svr_ctx = new sdskv_server_context_t;
     if(!tmp_svr_ctx)
         return SDSKV_ERR_ALLOCATION;
@@ -390,7 +515,10 @@ extern "C" int sdskv_provider_register(
 
 extern "C" char * sdskv_provider_get_config(sdskv_provider_t provider)
 {
-    return( margo_get_config(provider->mid));
+    Json::StreamWriterBuilder builder;
+    builder["indentation"] = "";
+    const std::string config = Json::writeString(builder, provider->json_cfg);
+    return strdup(config.c_str());
 }
 
 extern "C" margo_instance_id sdskv_provider_get_mid(sdskv_provider_t provider)
