@@ -121,6 +121,8 @@ static int sdskv_post_migration_callback(remi_fileset_t fileset, void* uargs);
 
 #endif
 
+static int populate_provider_from_config(sdskv_provider_t provider);
+
 static int validate_and_complete_config(margo_instance_id mid, Json::Value& config)
 {
     /**
@@ -299,6 +301,7 @@ extern "C" int sdskv_provider_register(
         return SDSKV_ERR_ALLOCATION;
 
     tmp_svr_ctx->mid = mid;
+    tmp_svr_ctx->json_cfg = config;
 
 #ifdef USE_REMI
     tmp_svr_ctx->owns_remi_provider = 0;
@@ -507,6 +510,12 @@ extern "C" int sdskv_provider_register(
     /* install the bake server finalize callback */
     margo_provider_push_finalize_callback(mid, tmp_svr_ctx, &sdskv_server_finalize_cb, tmp_svr_ctx);
 
+    ret = populate_provider_from_config(tmp_svr_ctx);
+    if(ret != SDSKV_SUCCESS) {
+        sdskv_provider_destroy(tmp_svr_ctx);
+        return ret;
+    }
+
     if(provider != SDSKV_PROVIDER_IGNORE)
         *provider = tmp_svr_ctx;
 
@@ -550,7 +559,11 @@ extern "C" int sdskv_provider_find_comparison_function(
         const char* library,
         const char* function_name)
 {
-    void *handle = dlopen(library, RTLD_NOW);
+    void *handle = nullptr;
+    if(library != nullptr && library[0] == '\0')
+        handle = dlopen(nullptr, RTLD_NOW);
+    else
+        handle = dlopen(library, RTLD_NOW);
     if (handle == NULL)
         return SDSKV_ERR_COMP_FUNC;
     sdskv_compare_fn *comp_fn = (sdskv_compare_fn*)dlsym(handle, function_name);
@@ -574,7 +587,7 @@ extern "C" int sdskv_provider_attach_database(
         comp_fn = it->second;
     }
 
-    auto db = datastore_factory::open_datastore(config->db_type, 
+    auto db = datastore_factory::open_datastore(config->db_type,
             std::string(config->db_name), std::string(config->db_path));
     if(db == nullptr) return SDSKV_ERR_DB_CREATE;
     if(comp_fn) {
@@ -718,7 +731,7 @@ static void sdskv_open_ult(hg_handle_t handle)
     margo_instance_id mid = margo_hg_handle_get_instance(handle);
     assert(mid);
     const struct hg_info* info = margo_get_info(handle);
-    sdskv_provider_t svr_ctx = 
+    sdskv_provider_t svr_ctx =
         (sdskv_provider_t)margo_registered_data(mid, info->id);
     if(!svr_ctx) {
         margo_error(mid, "Error (sdskv_open_ult): SDSKV could not find provider with id\n");
@@ -768,7 +781,7 @@ static void sdskv_count_db_ult(hg_handle_t handle)
     margo_instance_id mid = margo_hg_handle_get_instance(handle);
     assert(mid);
     const struct hg_info* info = margo_get_info(handle);
-    sdskv_provider_t svr_ctx = 
+    sdskv_provider_t svr_ctx =
         (sdskv_provider_t)margo_registered_data(mid, info->id);
     if(!svr_ctx) {
         margo_error(mid, "Error (sdskv_count_db_ult): SDSKV could not find provider with id\n");
@@ -800,7 +813,7 @@ static void sdskv_list_db_ult(hg_handle_t handle)
     margo_instance_id mid = margo_hg_handle_get_instance(handle);
     assert(mid);
     const struct hg_info* info = margo_get_info(handle);
-    sdskv_provider_t svr_ctx = 
+    sdskv_provider_t svr_ctx =
         (sdskv_provider_t)margo_registered_data(mid, info->id);
     if(!svr_ctx) {
         margo_error(mid, "Error (sdskv_list_db_ult): SDSKV could not find provider with id\n"); 
@@ -858,7 +871,7 @@ static void sdskv_put_ult(hg_handle_t handle)
     margo_instance_id mid = margo_hg_handle_get_instance(handle);
     assert(mid);
     const struct hg_info* info = margo_get_info(handle);
-    sdskv_provider_t svr_ctx = 
+    sdskv_provider_t svr_ctx =
         (sdskv_provider_t)margo_registered_data(mid, info->id);
     if(!svr_ctx) {
         margo_error(mid, "Error (sdskv_put_ult): SDSKV could not find provider\n");
@@ -919,7 +932,7 @@ static void sdskv_put_multi_ult(hg_handle_t handle)
 
     margo_instance_id mid = margo_hg_handle_get_instance(handle);
     const struct hg_info* info = margo_get_info(handle);
-    sdskv_provider_t svr_ctx = 
+    sdskv_provider_t svr_ctx =
         (sdskv_provider_t)margo_registered_data(mid, info->id);
     if(!svr_ctx) {
         out.ret = SDSKV_ERR_UNKNOWN_PR;
@@ -936,7 +949,7 @@ static void sdskv_put_multi_ult(hg_handle_t handle)
     ABT_rwlock_rdlock(svr_ctx->lock);
     auto it = svr_ctx->databases.find(in.db_id);
     if(it == svr_ctx->databases.end()) {
-        ABT_rwlock_unlock(svr_ctx->lock); 
+        ABT_rwlock_unlock(svr_ctx->lock);
         out.ret = SDSKV_ERR_UNKNOWN_DB;
         return;
     }
@@ -948,7 +961,7 @@ static void sdskv_put_multi_ult(hg_handle_t handle)
     local_vals_buffer.resize(in.vals_bulk_size);
     std::vector<void*> keys_addr(1); keys_addr[0] = (void*)local_keys_buffer.data();
     std::vector<void*> vals_addr(1); vals_addr[0] = (void*)local_vals_buffer.data();
-    
+
     /* create bulk handle to receive keys */
     hret = margo_bulk_create(mid, 1, keys_addr.data(), &in.keys_bulk_size,
             HG_BULK_WRITE_ONLY, &local_keys_bulk_handle);
@@ -3272,4 +3285,50 @@ extern "C" int sdskv_provider_set_abtio_instance(
             abtio);
 #endif
     return SDSKV_SUCCESS;
+}
+
+static int populate_provider_from_config(sdskv_provider_t provider)
+{
+    int ret = SDSKV_SUCCESS;
+    auto& comparators = provider->json_cfg["comparators"];
+    for(auto it = comparators.begin(); it != comparators.end(); it++) {
+        ret = sdskv_provider_find_comparison_function(
+                provider, (*it)["library"].asString().c_str(),
+                (*it)["name"].asString().c_str());
+        if(ret != SDSKV_SUCCESS) {
+            return ret;
+        }
+    }
+    sdskv_database_id_t id;
+    sdskv_config_t db_cfg;
+    auto& databases = provider->json_cfg["databases"];
+    for(auto it = databases.begin(); it != databases.end(); it++) {
+        std::string name  = (*it)["name"].asString();
+        std::string type  = (*it)["type"].asString();
+        std::string path  = (*it)["path"].asString();
+        std::string comp  = (*it)["comparator"].asString();
+        bool no_overwrite = (*it)["no_overwrite"].asBool();
+        db_cfg.db_name = name.c_str();
+        db_cfg.db_path = path.c_str();
+        db_cfg.db_comp_fn_name = comp.c_str();
+        db_cfg.db_no_overwrite = no_overwrite;
+        if(type == "map") db_cfg.db_type = KVDB_MAP;
+        else if(type == "null") db_cfg.db_type = KVDB_NULL;
+        else if(type == "leveldb" || type == "ldb") db_cfg.db_type = KVDB_LEVELDB;
+        else if(type == "berkeleydb" || type == "bdb") db_cfg.db_type = KVDB_BERKELEYDB;
+        else if(type == "forward" || type == "fwd") db_cfg.db_type = KVDB_FORWARDDB;
+        else {
+            margo_error(provider->mid, "SDSKV config: unknown database type \"%s\"", type);
+            ret = SDSKV_ERR_CONFIG;
+            break;
+        }
+        ret = sdskv_provider_attach_database(
+                provider, &db_cfg, &id);
+        if(ret == SDSKV_SUCCESS) {
+            (*it)["__database_id__"] = id;
+        }
+    }
+    if(ret != SDSKV_SUCCESS)
+        sdskv_provider_remove_all_databases(provider);
+    return ret;
 }
