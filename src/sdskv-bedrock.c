@@ -36,8 +36,9 @@ static char* sdskv_get_provider_config(
         bedrock_module_provider_t provider)
 {
     margo_trace(sdskv_provider_get_mid(provider), "Executing %s", __func__);
-    return NULL;
+    return sdskv_provider_get_config((sdskv_provider_t)provider);
 }
+
 static int sdskv_init_client(
         bedrock_args_t args,
         bedrock_module_client_t * client)

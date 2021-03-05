@@ -316,6 +316,7 @@ extern "C" int sdskv_provider_register(
     ret = ABT_rwlock_create(&(tmp_svr_ctx->lock));
     if(ret != ABT_SUCCESS) {
         free(tmp_svr_ctx);
+        margo_error(mid, "Failed to create rwlock");
         return SDSKV_MAKE_ABT_ERROR(ret);
     }
 
@@ -564,11 +565,15 @@ extern "C" int sdskv_provider_find_comparison_function(
         handle = dlopen(nullptr, RTLD_NOW);
     else
         handle = dlopen(library, RTLD_NOW);
-    if (handle == NULL)
+    if (handle == NULL) {
+        margo_error(provider->mid, "Could not dlopen %s to find comparator function", library);
         return SDSKV_ERR_COMP_FUNC;
+    }
     sdskv_compare_fn *comp_fn = (sdskv_compare_fn*)dlsym(handle, function_name);
-    if (comp_fn == NULL)
+    if (comp_fn == NULL) {
+        margo_error(provider->mid, "Could not find comparator function %s", function_name);
         return SDSKV_ERR_COMP_FUNC;
+    }
     provider->compfunctions[std::string(function_name)] = *comp_fn;
 
     return SDSKV_SUCCESS;
@@ -579,7 +584,7 @@ extern "C" int sdskv_provider_attach_database(
         sdskv_database_id_t* db_id)
 {
     sdskv_compare_fn comp_fn = NULL;
-    if(config->db_comp_fn_name) {
+    if(config->db_comp_fn_name && config->db_comp_fn_name[0]) {
         std::string k(config->db_comp_fn_name);
         auto it = provider->compfunctions.find(k);
         if(it == provider->compfunctions.end())
