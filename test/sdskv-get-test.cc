@@ -1,6 +1,6 @@
 /*
  * (C) 2015 The University of Chicago
- * 
+ *
  * See COPYRIGHT in top-level directory.
  */
 
@@ -126,6 +126,59 @@ int main(int argc, char *argv[])
         keys.push_back(k);
     }
     printf("Successfuly inserted %d keys\n", num_keys);
+
+    /* **** get keys **** */
+    for(unsigned i=0; i < num_keys; i++) {
+        auto k = keys[rand() % keys.size()];
+        size_t value_size = max_value_size;
+        std::vector<char> v(max_value_size);
+        ret = sdskv_get(kvph, db_id,
+                (const void *)k.data(), k.size(),
+                (void *)v.data(), &value_size);
+        if(ret != 0) {
+            fprintf(stderr, "Error: sdskv_get() failed (key was %s)\n", k.c_str());
+            sdskv_shutdown_service(kvcl, svr_addr);
+            sdskv_provider_handle_release(kvph);
+            margo_addr_free(mid, svr_addr);
+            sdskv_client_finalize(kvcl);
+            margo_finalize(mid);
+            return -1;
+        }
+        std::string vstring((char*)(v.data()));
+        std::cout << "Got " << k << " ===> " << vstring << std::endl;
+        if(vstring != reference[k]) {
+            fprintf(stderr, "Error: sdskv_get() returned a value different from the reference\n");
+            sdskv_shutdown_service(kvcl, svr_addr);
+            sdskv_provider_handle_release(kvph);
+            margo_addr_free(mid, svr_addr);
+            sdskv_client_finalize(kvcl);
+            margo_finalize(mid);
+            return -1;
+        }
+    }
+
+    /* **** override keys ***** */
+    reference.clear();
+    for(unsigned i=0; i < num_keys; i++) {
+        const auto& k = keys[i];
+        // the keys have 2 characters more than the previously stored ones
+        auto v = gen_random_string(5+i*(max_value_size-5)/num_keys);
+        ret = sdskv_put(kvph, db_id,
+                (const void *)k.data(), k.size(),
+                (const void *)v.data(), v.size());
+        if(ret != 0) {
+            fprintf(stderr, "Error: sdskv_put() failed when overwritting (iteration %d)\n", i);
+            sdskv_shutdown_service(kvcl, svr_addr);
+            sdskv_provider_handle_release(kvph);
+            margo_addr_free(mid, svr_addr);
+            sdskv_client_finalize(kvcl);
+            margo_finalize(mid);
+            return -1;
+        }
+        std::cout << "Inserted " << k << "\t ===> " << v << std::endl;
+        reference[k] = v;
+    }
+    printf("Successfuly overwritten %d keys\n", num_keys);
 
     /* **** get keys **** */
     for(unsigned i=0; i < num_keys; i++) {

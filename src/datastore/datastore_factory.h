@@ -102,7 +102,7 @@ class datastore_factory {
             const std::string& path)
 #else
     static AbstractDataStore* open_datastore(
-            kv_db_type_t type, 
+            kv_db_type_t type,
             const std::string& name="db",
             const std::string& path="db")
 #endif

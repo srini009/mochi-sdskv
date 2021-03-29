@@ -60,7 +60,7 @@ class MapDataStore : public AbstractDataStore {
                 ABT_rwlock_unlock(_map_lock);
                 return SDSKV_ERR_KEYEXISTS;
             }
-            _map.insert(std::make_pair(key,data));
+            _map[key] = data;
             ABT_rwlock_unlock(_map_lock);
             return SDSKV_SUCCESS;
         }
@@ -72,7 +72,7 @@ class MapDataStore : public AbstractDataStore {
                 ABT_rwlock_unlock(_map_lock);
                 return SDSKV_ERR_KEYEXISTS;
             }
-            _map.insert(std::make_pair(std::move(key),std::move(data)));
+            _map[std::move(key)] = std::move(data);
             ABT_rwlock_unlock(_map_lock);
             return SDSKV_SUCCESS;
         }
@@ -132,7 +132,7 @@ class MapDataStore : public AbstractDataStore {
 
         virtual void set_comparison_function(const std::string& name, comparator_fn less) override {
            _comp_fun_name = name;
-           _less = less; 
+           _less = less;
         }
 
         virtual void set_no_overwrite() override {
