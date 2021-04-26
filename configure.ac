@@ -203,14 +203,14 @@ AC_ARG_ENABLE(bedrock,
 )
 AM_CONDITIONAL(ENABLE_BEDROCK, test x$enable_bedrock = xyes)
 if test "$enable_bedrock" = "yes" ; then
-	AC_DEFINE(USE_BEDROCK, 1, [Bedrock support enabled.])
-	USE_BEDROCK=1
-	PKG_CHECK_MODULES([BEDROCK],[bedrock-client],[],
-			  AC_MSG_ERROR([Bedrock requested, but could not find bedrock]))
-	LIBS="$BEDROCK_LIBS $LIBS"
-	CPPFLAGS="$BEDROCK_CFLAGS $CPPFLAGS"
+        AC_DEFINE(USE_BEDROCK, 1, [Bedrock support enabled.])
+        USE_BEDROCK=1
+        PKG_CHECK_MODULES([BEDROCK],[bedrock-server],[],
+              AC_MSG_ERROR([Bedrock requested, but could not find bedrock]))
+        LIBS="$BEDROCK_LIBS $LIBS"
+        CPPFLAGS="$BEDROCK_CFLAGS $CPPFLAGS"
 else
-	USE_BEDROCK=0
+        USE_BEDROCK=0
 fi
 AM_CONDITIONAL(BUILD_BEDROCK, test $USE_BEDROCK -eq 1)
 AC_SUBST(USE_BEDROCK)
