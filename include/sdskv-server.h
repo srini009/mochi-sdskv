@@ -43,10 +43,12 @@ typedef void (*sdskv_post_migration_callback_fn)(sdskv_provider_t, const sdskv_c
  * can be memset to zero to use default values.
  */
 struct sdskv_provider_init_info {
-    const char *json_config;
-    ABT_pool    rpc_pool;
+    const char *json_config;   /* optional JSON-formatted config */
+    ABT_pool    rpc_pool;      /* optional pool on which to run RPC handlers */
+    void*       remi_provider; /* optional REMI provider */
+    void*       remi_client;   /* optional REMI client */
 };
-#define SDSKV_PROVIDER_INIT_INFO_INIT {NULL, ABT_POOL_NULL}
+#define SDSKV_PROVIDER_INIT_INFO_INIT {NULL, ABT_POOL_NULL, NULL, NULL}
 /**
  * @brief Creates a new provider.
  *
@@ -207,18 +209,6 @@ int sdskv_provider_set_migration_callbacks(
         sdskv_pre_migration_callback_fn pre_cb,
         sdskv_post_migration_callback_fn  post_cb,
         void* uargs);
-
-/**
- * @brief Sets the ABT-IO instance to be used by REMI for migration IO.
- *
- * @param provider Provider.
- * @param abtio ABT-IO instance.
- *
- * @return SDSKV_SUCCESS or error code defined in sdskv-common.h
- */
-int sdskv_provider_set_abtio_instance(
-        sdskv_provider_t provider,
-        abt_io_instance_id abtio);
 
 #ifdef __cplusplus
 }

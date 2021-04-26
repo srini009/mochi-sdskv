@@ -171,7 +171,7 @@ class provider {
         _CHECK_RET(ret);
         return size;
     }
-    
+
     /**
      * @brief Registers migration callbacks for REMI to use.
      *
@@ -187,15 +187,6 @@ class provider {
         _CHECK_RET(ret);
     }
 
-    /**
-     * @brief Set the ABT-IO instance to be used by REMI.
-     *
-     * @param abtio ABT-IO instance.
-     */
-    void set_abtio_instance(abt_io_instance_id abtio) {
-        int ret = sdskv_provider_set_abtio_instance(m_provider, abtio);
-        _CHECK_RET(ret);
-    }
 };
 
 }

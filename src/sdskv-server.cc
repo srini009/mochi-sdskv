@@ -31,7 +31,6 @@ struct sdskv_server_context_t
     std::map<std::string, sdskv_compare_fn> compfunctions;
 
 #ifdef USE_REMI
-    int owns_remi_provider;
     remi_client_t   remi_client;
     remi_provider_t remi_provider;
     sdskv_pre_migration_callback_fn pre_migration_callback;
@@ -304,7 +303,6 @@ extern "C" int sdskv_provider_register(
     tmp_svr_ctx->json_cfg = config;
 
 #ifdef USE_REMI
-    tmp_svr_ctx->owns_remi_provider = 0;
     tmp_svr_ctx->remi_client   = REMI_CLIENT_NULL;
     tmp_svr_ctx->remi_provider = REMI_PROVIDER_NULL;
     tmp_svr_ctx->pre_migration_callback = NULL;
@@ -474,30 +472,10 @@ extern "C" int sdskv_provider_register(
     margo_register_data(mid, rpc_id, (void*)tmp_svr_ctx, NULL);
 
 #ifdef USE_REMI
-    /* register a REMI client */
-    ret = remi_client_init(mid, ABT_IO_INSTANCE_NULL, &(tmp_svr_ctx->remi_client));
-    if(ret != REMI_SUCCESS) {
-        sdskv_server_finalize_cb(tmp_svr_ctx);
-        return SDSKV_ERR_REMI;
-    }
-
+    tmp_svr_ctx->remi_client = (remi_client_t)(args->remi_client);
+    tmp_svr_ctx->remi_provider = (remi_provider_t)(args->remi_provider);
     /* check if a REMI provider exists with the same provider id */
-    {
-        int flag;
-        remi_provider_t remi_provider;
-        remi_provider_registered(mid, provider_id, &flag, NULL, NULL, &remi_provider);
-        if(flag) { /* a REMI provider exists */
-            tmp_svr_ctx->remi_provider = remi_provider;
-            tmp_svr_ctx->owns_remi_provider = 0;
-        } else {
-            /* register a REMI provider because it does not exist */
-            ret = remi_provider_register(mid, ABT_IO_INSTANCE_NULL, provider_id, args->rpc_pool, &(tmp_svr_ctx->remi_provider));
-            if(ret != REMI_SUCCESS) {
-                sdskv_server_finalize_cb(tmp_svr_ctx);
-                return SDSKV_ERR_REMI;
-            }
-            tmp_svr_ctx->owns_remi_provider = 1;
-        }
+    if(tmp_svr_ctx->remi_provider) {
         ret = remi_provider_register_migration_class(tmp_svr_ctx->remi_provider,
                 "sdskv", sdskv_pre_migration_callback,
                 sdskv_post_migration_callback, NULL, tmp_svr_ctx);
@@ -3044,6 +3022,11 @@ static void sdskv_migrate_database_ult(hg_handle_t handle)
         }
 
 #ifdef USE_REMI
+        if(svr_ctx->remi_client == NULL) {
+            out.ret = SDSKV_ERR_REMI;
+            break;
+        }
+
         ABT_rwlock_rdlock(svr_ctx->lock);
         // find the database that needs to be migrated
         auto it = svr_ctx->databases.find(in.source_db_id);
@@ -3098,7 +3081,6 @@ static void sdskv_migrate_database_ult(hg_handle_t handle)
         }
 #else
         out.ret = SDSKV_OP_NOT_IMPL;
-
 #endif
 
     } while(false);
@@ -3121,13 +3103,6 @@ static void sdskv_server_finalize_cb(void *data)
     sdskv_provider_t provider = (sdskv_provider_t)data;
     assert(provider);
     margo_instance_id mid = provider->mid;
-
-#ifdef USE_REMI
-    if(provider->owns_remi_provider) {
-        remi_provider_destroy(provider->remi_provider);
-    }
-    remi_client_finalize(provider->remi_client);
-#endif
 
     sdskv_provider_remove_all_databases(provider);
 
@@ -3263,7 +3238,7 @@ static int sdskv_post_migration_callback(remi_fileset_t fileset, void* uargs)
         config.db_no_overwrite = 1;
     else
         config.db_no_overwrite = 0;
-    
+
     sdskv_database_id_t db_id;
     int ret = sdskv_provider_attach_database(provider, &config, &db_id);
     if(ret != SDSKV_SUCCESS)
@@ -3276,21 +3251,6 @@ static int sdskv_post_migration_callback(remi_fileset_t fileset, void* uargs)
 }
 
 #endif
-
-extern "C" int sdskv_provider_set_abtio_instance(
-        sdskv_provider_t provider,
-        abt_io_instance_id abtio)
-{
-#ifdef USE_REMI
-    remi_provider_set_abt_io_instance(
-            provider->remi_provider,
-            abtio);
-    remi_client_set_abt_io_instance(
-            provider->remi_client,
-            abtio);
-#endif
-    return SDSKV_SUCCESS;
-}
 
 static int populate_provider_from_config(sdskv_provider_t provider)
 {
