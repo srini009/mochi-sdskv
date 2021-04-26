@@ -1,6 +1,6 @@
 /*
  * (C) 2015 The University of Chicago
- * 
+ *
  * See COPYRIGHT in top-level directory.
  */
 
@@ -175,9 +175,11 @@ int main(int argc, char **argv)
         int i;
         for(i=0; i< opts.num_db; i++) {
             sdskv_provider_t provider;
+            struct sdskv_provider_init_info args;
+            args.json_config = NULL;
+            args.rpc_pool = SDSKV_ABT_POOL_DEFAULT;
             ret = sdskv_provider_register(mid, i+1,
-                    SDSKV_ABT_POOL_DEFAULT,
-                    &provider);
+                    &args, &provider);
 
             if(ret != 0)
             {
@@ -226,15 +228,16 @@ int main(int argc, char **argv)
     } else {
 
         int i;
+        struct sdskv_provider_init_info args;
+        args.json_config = NULL;
+        args.rpc_pool = SDSKV_ABT_POOL_DEFAULT;
         sdskv_provider_t provider;
-        ret = sdskv_provider_register(mid, 1,
-                SDSKV_ABT_POOL_DEFAULT,
-                &provider);
+        ret = sdskv_provider_register(mid, 1, &args, &provider);
 
         if(ret != 0)
         {
             fprintf(stderr, "Error: sdskv_provider_register()\n");
-            margo_finalize(mid);                                    
+            margo_finalize(mid);
             return(-1);
         }
 
@@ -268,7 +271,7 @@ int main(int argc, char **argv)
             if(ret != 0)
             {
                 fprintf(stderr, "Error: sdskv_provider_add_database()\n");
-                margo_finalize(mid);                                    
+                margo_finalize(mid);
                 return(-1);
             }
 

@@ -69,11 +69,11 @@ LIBS="$MARGO_LIBS $LIBS"
 CPPFLAGS="$MARGO_CFLAGS $CPPFLAGS"
 CFLAGS="$MARGO_CFLAGS $CFLAGS"
 
-PKG_CHECK_MODULES([ABTIO],[abt-io],[],
-      AC_MSG_ERROR([Could not find working abt-io installation!]) )
-LIBS="$ABTIO_LIBS $LIBS"
-CPPFLAGS="$ABTIO_CFLAGS $CPPFLAGS"
-CFLAGS="$ABTIO_CFLAGS $CFLAGS"
+PKG_CHECK_MODULES([JSONCPP], [jsoncpp], [],
+      AC_MSG_ERROR([Could not find working jsoncpp installation!]) )
+LIBS="$JSONCPP_LIBS $LIBS"
+CPPFLAGS="$JSONCPP_CFLAGS $CPPFLAGS"
+CFLAGS="$JSONCPP_CFLAGS $CFLAGS"
 
 SERVER_DEPS_PKG=""
 
@@ -127,9 +127,9 @@ if test "x${with_berkeleydb}" != "x" ; then
 	CXXFLAGS="$CXXFLAGS -I${with_berkeleydb}/include"
 #LIBS="$LIBS -L${with_berkeleydb}/lib/ -ldb_cxx -ldb_stl"
 	AC_CHECK_HEADERS([db_cxx.h], ,
-			AC_ERROR("Could not find Berkely DB C++ headers"))
+			AC_MSG_ERROR("Could not find Berkely DB C++ headers"))
 	AC_CHECK_HEADERS([dbstl_map.h],,
-			AC_ERROR("Could not find Berkely DB STL headers"))
+			AC_MSG_ERROR("Could not find Berkely DB STL headers"))
 	AC_DEFINE([USE_BDB], 1, [Use Berkely DB backend])
 	SERVER_LIBS_EXT="${SERVER_LIBS_EXT} -L${with_berkeleydb}/lib -ldb_cxx -ldb_stl"
 	AC_LANG_POP
@@ -146,7 +146,7 @@ if test "x${leveldb_backend}" == xyes ; then
         ], [
             # fall back to conventional tests if no pkgconfig
             AC_CHECK_HEADERS([leveldb/c.h], ,
-                             AC_ERROR("Could not find leveldb headers"))
+                             AC_MSG_ERROR("Could not find leveldb headers"))
             AC_DEFINE([USE_LEVELDB], 1, [use leveldb backend])
 	    SERVER_LIBS_EXT="${SERVER_LIBS_EXT} -lleveldb"
         ])
@@ -186,6 +186,29 @@ else
 fi
 AC_SUBST(USE_REMI)
 
+AC_ARG_ENABLE(bedrock,
+              [AS_HELP_STRING([--enable-bedrock],[Enable Bedrock (Mochi loader) support @<:@default=no@:>@])],
+              [case "${enableval}" in
+                yes) enable_bedrock="yes" ;;
+                no) enable_bedrock="no" ;;
+                *) AC_MSG_ERROR(bad value ${enableval} for --enable-bedrock) ;;
+               esac],
+              [enable_bedrock="no"]
+)
+AM_CONDITIONAL(ENABLE_BEDROCK, test x$enable_bedrock = xyes)
+if test "$enable_bedrock" = "yes" ; then
+        AC_DEFINE(USE_BEDROCK, 1, [Bedrock support enabled.])
+        USE_BEDROCK=1
+        PKG_CHECK_MODULES([BEDROCK],[bedrock-server],[],
+              AC_MSG_ERROR([Bedrock requested, but could not find bedrock]))
+        LIBS="$BEDROCK_LIBS $LIBS"
+        CPPFLAGS="$BEDROCK_CFLAGS $CPPFLAGS"
+else
+        USE_BEDROCK=0
+fi
+AM_CONDITIONAL(BUILD_BEDROCK, test $USE_BEDROCK -eq 1)
+AC_SUBST(USE_BEDROCK)
+
 AC_ARG_ENABLE(benchmark,
               [AS_HELP_STRING([--enable-benchmark],[Build SDSKV benchmark @<:@default=no@:>@])],
               [case "${enableval}" in
@@ -196,12 +219,6 @@ AC_ARG_ENABLE(benchmark,
               [enable_benchmark="no"]
 )
 AM_CONDITIONAL(BUILD_BENCHMARK, test x$enable_benchmark = xyes)
-if test "$enable_benchmark" = "yes"; then
-        PKG_CHECK_MODULES(JSONCPP, jsoncpp)
-        LIBS="$JSONCPP_LIBS $LIBS"
-        CPPFLAGS="$JSONCPP_CFLAGS $CPPFLAGS"
-        CFLAGS="$JSONCPP_CFLAGS $CFLAGS"
-fi
 
 SERVER_LIBS="$SERVER_LIBS_PKG $SERVER_LIBS_EXT -lstdc++"
 

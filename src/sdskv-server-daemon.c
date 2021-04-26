@@ -170,8 +170,9 @@ int main(int argc, char **argv)
         int i;
         for(i=0; i< opts.num_db; i++) {
             sdskv_provider_t provider;
+            struct sdskv_provider_init_info sdskv_args = SDSKV_PROVIDER_INIT_INFO_INIT;
             ret = sdskv_provider_register(mid, i+1,
-                    SDSKV_ABT_POOL_DEFAULT,
+                    &sdskv_args,
                     &provider);
 
             if(ret != 0)
@@ -213,8 +214,9 @@ int main(int argc, char **argv)
 
         int i;
         sdskv_provider_t provider;
+        struct sdskv_provider_init_info sdskv_args = SDSKV_PROVIDER_INIT_INFO_INIT;
         ret = sdskv_provider_register(mid, 1,
-                SDSKV_ABT_POOL_DEFAULT,
+                &sdskv_args,
                 &provider);
 
         if(ret != 0)
