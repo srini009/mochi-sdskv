@@ -6,5 +6,5 @@ spack:
   - mochi-margo
   - mochi-abt-io
   - berkeley-db+cxx+stl
-  - leveldb
+  - leveldb@1.22
   concretization: together

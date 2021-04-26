@@ -1,0 +1,24 @@
+{
+    "margo" : {},
+    "abt_io" : [
+        {
+            "name" : "my_abt_io",
+            "pool" : "__primary__"
+        }
+    ],
+    "libraries" : {
+        "sdskv" : "lib/.libs/libsdskv-bedrock.so"
+    },
+    "providers" : [
+        {
+            "name" : "my_sdskv_provider",
+            "type" : "sdskv",
+            "provider_id" : 1,
+            "pool" : "__primary__",
+            "config" : {
+            },
+            "dependencies" : {
+            }
+        }
+    ]
+}
