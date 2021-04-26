@@ -69,12 +69,6 @@ LIBS="$MARGO_LIBS $LIBS"
 CPPFLAGS="$MARGO_CFLAGS $CPPFLAGS"
 CFLAGS="$MARGO_CFLAGS $CFLAGS"
 
-PKG_CHECK_MODULES([ABTIO],[abt-io],[],
-      AC_MSG_ERROR([Could not find working abt-io installation!]) )
-LIBS="$ABTIO_LIBS $LIBS"
-CPPFLAGS="$ABTIO_CFLAGS $CPPFLAGS"
-CFLAGS="$ABTIO_CFLAGS $CFLAGS"
-
 PKG_CHECK_MODULES([JSONCPP], [jsoncpp], [],
       AC_MSG_ERROR([Could not find working jsoncpp installation!]) )
 LIBS="$JSONCPP_LIBS $LIBS"

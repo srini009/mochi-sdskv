@@ -8,7 +8,6 @@
 #define __SDSKV_SERVER_H
 
 #include <margo.h>
-#include <abt-io.h>
 #include <sdskv-common.h>
 
 #ifdef __cplusplus
