@@ -2,9 +2,9 @@ spack:
   specs:
   - jsoncpp
   - mochi-bedrock
+  - mochi-remi
   - mpich
   - mochi-margo
-  - mochi-abt-io
   - berkeley-db+cxx+stl
   - leveldb@1.22
   concretization: together
