@@ -5,7 +5,7 @@
 #include <sdskv-common.hpp>
 
 #define _CHECK_RET(__ret) \
-            if(__ret != SDSKV_SUCCESS) throw exception(__ret)
+    if (__ret != SDSKV_SUCCESS) throw exception(__ret)
 
 namespace sdskv {
 
@@ -14,8 +14,8 @@ namespace sdskv {
  */
 class provider {
 
-    margo_instance_id m_mid     = MARGO_INSTANCE_NULL;
-    sdskv_provider_t m_provider = NULL;
+    margo_instance_id m_mid      = MARGO_INSTANCE_NULL;
+    sdskv_provider_t  m_provider = NULL;
 
     /**
      * @brief Constructor is private. Use the create() factory method.
@@ -25,26 +25,26 @@ class provider {
      * @param pool Argobots pool.
      * @param config JSON configuration.
      */
-    provider(margo_instance_id mid,
-             uint16_t provider_id = 0,
-             ABT_pool pool = SDSKV_ABT_POOL_DEFAULT,
-             const std::string& config = std::string())
-    : m_mid(mid)
+    provider(margo_instance_id  mid,
+             uint16_t           provider_id = 0,
+             ABT_pool           pool        = SDSKV_ABT_POOL_DEFAULT,
+             const std::string& config      = std::string())
+        : m_mid(mid)
     {
         sdskv_provider_init_info args;
         args.json_config = config.empty() ? nullptr : config.c_str();
-        args.rpc_pool = pool;
+        args.rpc_pool    = pool;
         int ret = sdskv_provider_register(mid, provider_id, &args, &m_provider);
         _CHECK_RET(ret);
     }
 
-    static void finalize_callback(void* args) {
+    static void finalize_callback(void* args)
+    {
         auto* p = static_cast<provider*>(args);
         delete p;
     }
 
-    public:
-
+  public:
     /**
      * @brief Create a pointer to a provider. The provider will be automatically
      * deleted when Margo finalizes, unless the user calls delete before.
@@ -56,9 +56,9 @@ class provider {
      *
      * @return Pointer to a newly allocated provider.
      */
-    static provider* create(margo_instance_id mid,
-                            uint16_t provider_id = 0,
-                            ABT_pool pool = SDSKV_ABT_POOL_DEFAULT,
+    static provider* create(margo_instance_id  mid,
+                            uint16_t           provider_id = 0,
+                            ABT_pool           pool   = SDSKV_ABT_POOL_DEFAULT,
                             const std::string& config = std::string())
     {
         auto p = new provider(mid, provider_id, pool, config);
@@ -89,7 +89,8 @@ class provider {
     /**
      * @brief Destructor. Deregisters the provider.
      */
-    ~provider() {
+    ~provider()
+    {
         margo_provider_pop_finalize_callback(m_mid, this);
         sdskv_provider_destroy(m_provider);
     }
@@ -101,8 +102,10 @@ class provider {
      * @param comp_fn Comparison function pointer.
      */
     void add_comparison_function(const std::string& name,
-                                 sdskv_compare_fn comp_fn) {
-        int ret = sdskv_provider_add_comparison_function(m_provider, name.c_str(), comp_fn);
+                                 sdskv_compare_fn   comp_fn)
+    {
+        int ret = sdskv_provider_add_comparison_function(m_provider,
+                                                         name.c_str(), comp_fn);
         _CHECK_RET(ret);
     }
 
@@ -113,7 +116,8 @@ class provider {
      *
      * @return Database id.
      */
-    sdskv_database_id_t attach_database(const sdskv_config_t& config) {
+    sdskv_database_id_t attach_database(const sdskv_config_t& config)
+    {
         sdskv_database_id_t db_id;
         int ret = sdskv_provider_attach_database(m_provider, &config, &db_id);
         _CHECK_RET(ret);
@@ -125,7 +129,8 @@ class provider {
      *
      * @param db_id Database id of the database to remove.
      */
-    void remove_database(sdskv_database_id_t db_id) {
+    void remove_database(sdskv_database_id_t db_id)
+    {
         int ret = sdskv_provider_remove_database(m_provider, db_id);
         _CHECK_RET(ret);
     }
@@ -134,7 +139,8 @@ class provider {
      * @brief Remove all the databases from this provider (this will not
      * remove the underlying files).
      */
-    void remove_all_databases() {
+    void remove_all_databases()
+    {
         int ret = sdskv_provider_remove_all_databases(m_provider);
         _CHECK_RET(ret);
     }
@@ -144,9 +150,10 @@ class provider {
      *
      * @return Vector of database ids.
      */
-    std::vector<sdskv_database_id_t> databases() const {
+    std::vector<sdskv_database_id_t> databases() const
+    {
         std::vector<sdskv_database_id_t> dbs;
-        uint64_t num_dbs;
+        uint64_t                         num_dbs;
         int ret = sdskv_provider_count_databases(m_provider, &num_dbs);
         _CHECK_RET(ret);
         dbs.resize(num_dbs);
@@ -162,12 +169,11 @@ class provider {
      *
      * @return Size of the specified database.
      */
-    size_t compute_database_size(sdskv_database_id_t db_id) const {
+    size_t compute_database_size(sdskv_database_id_t db_id) const
+    {
         size_t size;
-        int ret = sdskv_provider_compute_database_size(
-                    m_provider,
-                    db_id,
-                    &size);
+        int    ret
+            = sdskv_provider_compute_database_size(m_provider, db_id, &size);
         _CHECK_RET(ret);
         return size;
     }
@@ -179,16 +185,16 @@ class provider {
      * @param post_cb Post-migration callback.
      * @param uargs User arguments.
      */
-    void set_migration_callbacks(sdskv_pre_migration_callback_fn pre_cb,
+    void set_migration_callbacks(sdskv_pre_migration_callback_fn  pre_cb,
                                  sdskv_post_migration_callback_fn post_cb,
-                                 void* uargs) {
-        int ret = sdskv_provider_set_migration_callbacks(m_provider,
-                        pre_cb, post_cb, uargs);
+                                 void*                            uargs)
+    {
+        int ret = sdskv_provider_set_migration_callbacks(m_provider, pre_cb,
+                                                         post_cb, uargs);
         _CHECK_RET(ret);
     }
-
 };
 
-}
+} // namespace sdskv
 #undef _CHECK_RET
 #endif
