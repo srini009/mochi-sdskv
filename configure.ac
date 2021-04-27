@@ -77,26 +77,6 @@ CFLAGS="$JSONCPP_CFLAGS $CFLAGS"
 
 SERVER_DEPS_PKG=""
 
-#PKG_CHECK_MODULES([SSG], [ssg], [],
-#		  AC_MSG_ERROR([Could not find ssg]) )
-#CFLAGS="$SSG_CFLAGS $CFLAGS"
-#SERVER_LIBS_PKG="$SSG_LIBS $SERVER_LIBS_PKG"
-
-#PKG_CHECK_MODULES([CHPLACEMENT], [ch-placement], [],
-#		  AC_MSG_ERROR([Could not find ch-placement]) )
-#CFLAGS="$CHPLACEMENT_CFLAGS $CFLAGS"
-#SERVER_LIBS_PKG="$CHPLAEMENT_LIBS $SERVER_LIBS_PKG"
-#GROUP_LIBS="$CHPLACEMENT_LIBS $CLIENT_LIBS"
-
-# uncertain what the lowest Boost we need is.
-# Ubuntu 14.04 has boost 1.54. Seems like a good starting point
-#AX_BOOST_BASE([1.54], ,
-#	      AC_MSG_ERROR([sdskeyval requires Boost but was unable to find it]))
-#AX_BOOST_SYSTEM
-#AX_BOOST_FILESYSTEM
-
-#SERVER_LIBS_EXT="$SERVER_LIBS_EXT ${BOOST_LDFLAGS} ${BOOST_FILESYSTEM_LIB} ${BOOST_SYSTEM_LIB}"
-
 # we have three possible backends for our datastore.  If none are selected,
 # then nothing will initialize the class and well that doesn't make any sense
 # anyway.  Set BwTree as a default option as it's self-contained to the tree.
@@ -109,31 +89,31 @@ berkelydb_backend=no
 SERVER_LIBS_EXT=""
 
 AC_ARG_ENABLE([leveldb],
-	      AS_HELP_STRING([--enable-leveldb], [Select "leveldb" as storage
-			      backend (default is no)]),
-	      [leveldb_backend=${enableval}]
+      AS_HELP_STRING([--enable-leveldb],
+                     [Select "leveldb" as storage backend (default is no)]),
+      [leveldb_backend=${enableval}]
 )
 AC_ARG_ENABLE([bwtree],
-	     AS_HELP_STRING([--enable-bwtree], [Enable BwTree as server
-			     backend.  (default is no) ]),
-	     [bwtree_backend=${enableval}], [bwtree_backend=no]
+     AS_HELP_STRING([--enable-bwtree],
+                    [Enable BwTree as server backend (default is no)]),
+     [bwtree_backend=${enableval}],
+     [bwtree_backend=no]
 )
 
 AC_ARG_WITH([berkeleydb],[AS_HELP_STRING([--with-berkeleydb@<:@=DIR@:>@],
-			[location of BerkeleyDB installation])])
+            [location of BerkeleyDB installation])])
 if test "x${with_berkeleydb}" != "x" ; then
-	AC_LANG_PUSH([C++])
-	CPPFLAGS="$CPPFLAGS -I${with_berkeleydb}/include"
-	CXXFLAGS="$CXXFLAGS -I${with_berkeleydb}/include"
-#LIBS="$LIBS -L${with_berkeleydb}/lib/ -ldb_cxx -ldb_stl"
-	AC_CHECK_HEADERS([db_cxx.h], ,
-			AC_MSG_ERROR("Could not find Berkely DB C++ headers"))
-	AC_CHECK_HEADERS([dbstl_map.h],,
-			AC_MSG_ERROR("Could not find Berkely DB STL headers"))
-	AC_DEFINE([USE_BDB], 1, [Use Berkely DB backend])
-	SERVER_LIBS_EXT="${SERVER_LIBS_EXT} -L${with_berkeleydb}/lib -ldb_cxx -ldb_stl"
-	AC_LANG_POP
-	berkelydb_backend=yes
+        AC_LANG_PUSH([C++])
+        CPPFLAGS="$CPPFLAGS -I${with_berkeleydb}/include"
+        CXXFLAGS="$CXXFLAGS -I${with_berkeleydb}/include"
+        AC_CHECK_HEADERS([db_cxx.h], ,
+                         AC_MSG_ERROR("Could not find Berkely DB C++ headers"))
+        AC_CHECK_HEADERS([dbstl_map.h],,
+                         AC_MSG_ERROR("Could not find Berkely DB STL headers"))
+        AC_DEFINE([USE_BDB], 1, [Use Berkely DB backend])
+        SERVER_LIBS_EXT="${SERVER_LIBS_EXT} -L${with_berkeleydb}/lib -ldb_cxx -ldb_stl"
+        AC_LANG_POP
+        berkelydb_backend=yes
 fi
 
 if test "x${leveldb_backend}" == xyes ; then
@@ -148,15 +128,15 @@ if test "x${leveldb_backend}" == xyes ; then
             AC_CHECK_HEADERS([leveldb/c.h], ,
                              AC_MSG_ERROR("Could not find leveldb headers"))
             AC_DEFINE([USE_LEVELDB], 1, [use leveldb backend])
-	    SERVER_LIBS_EXT="${SERVER_LIBS_EXT} -lleveldb"
+            SERVER_LIBS_EXT="${SERVER_LIBS_EXT} -lleveldb"
         ])
 fi
 
 if test "x${bwtree_backend}" == xyes ; then
-	AC_DEFINE([USE_BWTREE], 1, [use BwTree backend])
-	AC_MSG_WARN([BwTree backend is deprecated])
-	CPPFLAGS="-I${srcdir}/src/BwTree/src ${CPPFLAGS}"
-	CXXFLAGS="-pthread -g -Wall -mcx16 -Wno-invalid-offsetof ${CXXFLAGS}"
+        AC_DEFINE([USE_BWTREE], 1, [use BwTree backend])
+        AC_MSG_WARN([BwTree backend is deprecated])
+        CPPFLAGS="-I${srcdir}/src/BwTree/src ${CPPFLAGS}"
+        CXXFLAGS="-pthread -g -Wall -mcx16 -Wno-invalid-offsetof ${CXXFLAGS}"
 fi
 
 AM_CONDITIONAL([BUILD_BDB], [test "x${berkelydb_backend}" == xyes])
