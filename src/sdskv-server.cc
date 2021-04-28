@@ -277,6 +277,9 @@ sdskv_provider_register(margo_instance_id                      mid,
     sdskv_server_context_t* tmp_provider;
     int                     ret;
 
+    margo_trace(mid, "Registering SDSKV provider with provider id %d",
+                provider_id);
+
     Json::Value config;
     if (args->json_config && args->json_config[0]) {
         try {
@@ -297,7 +300,7 @@ sdskv_provider_register(margo_instance_id                      mid,
         if (flag == HG_TRUE) {
             margo_error(mid,
                         "sdskv_provider_register(): a provider with the same "
-                        "provider id (%d) already exists\n",
+                        "provider id (%d) already exists",
                         provider_id);
             return SDSKV_ERR_PR_EXISTS;
         }
@@ -497,6 +500,9 @@ sdskv_provider_register(margo_instance_id                      mid,
             tmp_provider->remi_provider, "sdskv", sdskv_pre_migration_callback,
             sdskv_post_migration_callback, NULL, tmp_provider);
         if (ret != REMI_SUCCESS) {
+            margo_error(
+                mid,
+                "Could not register REMI migration class for SDSKV provider");
             sdskv_server_finalize_cb(tmp_provider);
             return SDSKV_ERR_REMI;
         }
@@ -580,14 +586,23 @@ extern "C" int sdskv_provider_attach_database(sdskv_provider_t      provider,
     if (config->db_comp_fn_name && config->db_comp_fn_name[0]) {
         std::string k(config->db_comp_fn_name);
         auto        it = provider->compfunctions.find(k);
-        if (it == provider->compfunctions.end()) return SDSKV_ERR_COMP_FUNC;
+        if (it == provider->compfunctions.end()) {
+            margo_error(provider->mid,
+                        "Could not find comparison function \"%s\"",
+                        config->db_comp_fn_name);
+            return SDSKV_ERR_COMP_FUNC;
+        }
         comp_fn = it->second;
     }
 
     auto db = datastore_factory::open_datastore(config->db_type,
                                                 std::string(config->db_name),
                                                 std::string(config->db_path));
-    if (db == nullptr) return SDSKV_ERR_DB_CREATE;
+    if (db == nullptr) {
+        margo_error(provider->mid, "Factory failed to create datastore \"%s\"",
+                    config->db_name);
+        return SDSKV_ERR_DB_CREATE;
+    }
     if (comp_fn) {
         db->set_comparison_function(config->db_comp_fn_name, comp_fn);
     }
@@ -602,6 +617,10 @@ extern "C" int sdskv_provider_attach_database(sdskv_provider_t      provider,
     provider->databases[id] = db;
 
     *db_id = id;
+
+    margo_trace(provider->mid,
+                "Successfully opened database \"%s\" with id %lu",
+                config->db_name, id);
 
     return SDSKV_SUCCESS;
 }
@@ -618,8 +637,12 @@ extern "C" int sdskv_provider_remove_database(sdskv_provider_t    provider,
         auto db = provider->databases[db_id];
         delete db;
         provider->databases.erase(db_id);
+        margo_trace(provider->mid,
+                    "Successfully removed database %lu from provider", db_id);
         return SDSKV_SUCCESS;
     } else {
+        margo_error(provider->mid, "Could not find database id %lu in provider",
+                    db_id);
         return SDSKV_ERR_UNKNOWN_DB;
     }
 }
@@ -632,7 +655,7 @@ extern "C" int sdskv_provider_remove_all_databases(sdskv_provider_t provider)
     provider->databases.clear();
     provider->name2id.clear();
     provider->id2name.clear();
-
+    margo_trace(provider->mid, "Successfully removed all databases");
     return SDSKV_SUCCESS;
 }
 
@@ -721,9 +744,8 @@ static void sdskv_open_ult(hg_handle_t handle)
     sdskv_provider_t      provider
         = (sdskv_provider_t)margo_registered_data(mid, info->id);
     if (!provider) {
-        margo_error(
-            mid,
-            "Error (sdskv_open_ult): SDSKV could not find provider with id\n");
+        margo_error(mid, "%s: could not find provider with id %d", __func__,
+                    info->id);
         out.ret = SDSKV_ERR_UNKNOWN_PR;
         margo_respond(handle, &out);
         margo_destroy(handle);
@@ -732,6 +754,8 @@ static void sdskv_open_ult(hg_handle_t handle)
 
     hret = margo_get_input(handle, &in);
     if (hret != HG_SUCCESS) {
+        margo_error(mid, "%s: margo_get_input failed (ret = %d)", __func__,
+                    hret);
         out.ret = SDSKV_MAKE_HG_ERROR(hret);
         margo_respond(handle, &out);
         margo_destroy(handle);
@@ -742,6 +766,8 @@ static void sdskv_open_ult(hg_handle_t handle)
     auto it = provider->name2id.find(std::string(in.name));
     if (it == provider->name2id.end()) {
         ABT_rwlock_unlock(provider->lock);
+        margo_error(mid, "%s: could not find database with name \"%s\"",
+                    __func__, in.name);
         out.ret = SDSKV_ERR_DB_NAME;
         margo_respond(handle, &out);
         margo_free_input(handle, &in);
@@ -774,8 +800,9 @@ static void sdskv_count_db_ult(hg_handle_t handle)
         = (sdskv_provider_t)margo_registered_data(mid, info->id);
     if (!provider) {
         margo_error(mid,
-                    "Error (sdskv_count_db_ult): SDSKV could not find provider "
-                    "with id\n");
+                    "%s: could not find provider "
+                    "with id %d",
+                    __func__, info->id);
         out.ret = SDSKV_ERR_UNKNOWN_PR;
         margo_respond(handle, &out);
         margo_destroy(handle);
@@ -808,8 +835,9 @@ static void sdskv_list_db_ult(hg_handle_t handle)
         = (sdskv_provider_t)margo_registered_data(mid, info->id);
     if (!provider) {
         margo_error(mid,
-                    "Error (sdskv_list_db_ult): SDSKV could not find provider "
-                    "with id\n");
+                    "%s: could not find provider "
+                    "with id %d",
+                    __func__, info->id);
         out.ret = SDSKV_ERR_UNKNOWN_PR;
         margo_respond(handle, &out);
         margo_destroy(handle);
@@ -867,7 +895,9 @@ static void sdskv_put_ult(hg_handle_t handle)
         = (sdskv_provider_t)margo_registered_data(mid, info->id);
     if (!provider) {
         margo_error(mid,
-                    "Error (sdskv_put_ult): SDSKV could not find provider\n");
+                    "%s: could not find provider "
+                    "with id %d",
+                    __func__, info->id);
         out.ret = SDSKV_ERR_UNKNOWN_PR;
         margo_respond(handle, &out);
         margo_destroy(handle);
@@ -931,6 +961,10 @@ static void sdskv_put_multi_ult(hg_handle_t handle)
     sdskv_provider_t      provider
         = (sdskv_provider_t)margo_registered_data(mid, info->id);
     if (!provider) {
+        margo_error(mid,
+                    "%s: could not find provider "
+                    "with id %d",
+                    __func__, info->id);
         out.ret = SDSKV_ERR_UNKNOWN_PR;
         return;
     }
@@ -1043,6 +1077,10 @@ static void sdskv_put_packed_ult(hg_handle_t handle)
         = (sdskv_provider_t)margo_registered_data(mid, info->id);
     if (!provider) {
         out.ret = SDSKV_ERR_UNKNOWN_PR;
+        margo_error(mid,
+                    "%s: could not find provider "
+                    "with id %d",
+                    __func__, info->id);
         return;
     }
 
@@ -1131,7 +1169,10 @@ static void sdskv_length_ult(hg_handle_t handle)
     sdskv_provider_t      provider
         = (sdskv_provider_t)margo_registered_data(mid, info->id);
     if (!provider) {
-        margo_error(mid, "Error: SDSKV could not find provider\n");
+        margo_error(mid,
+                    "%s: could not find provider "
+                    "with id %d",
+                    __func__, info->id);
         out.ret = SDSKV_ERR_UNKNOWN_PR;
         margo_respond(handle, &out);
         margo_destroy(handle);
@@ -1191,7 +1232,10 @@ static void sdskv_get_ult(hg_handle_t handle)
     sdskv_provider_t      provider
         = (sdskv_provider_t)margo_registered_data(mid, info->id);
     if (!provider) {
-        margo_error(mid, "Error: SDSKV could not find provider\n");
+        margo_error(mid,
+                    "%s: could not find provider "
+                    "with id %d",
+                    __func__, info->id);
         out.ret = SDSKV_ERR_UNKNOWN_PR;
         margo_respond(handle, &out);
         margo_destroy(handle);
@@ -1416,6 +1460,10 @@ static void sdskv_get_packed_ult(hg_handle_t handle)
     sdskv_provider_t      provider
         = (sdskv_provider_t)margo_registered_data(mid, info->id);
     if (!provider) {
+        margo_error(mid,
+                    "%s: could not find provider "
+                    "with id %d",
+                    __func__, info->id);
         out.ret = SDSKV_ERR_UNKNOWN_PR;
         return;
     }
@@ -1554,6 +1602,10 @@ static void sdskv_length_multi_ult(hg_handle_t handle)
     sdskv_provider_t      provider
         = (sdskv_provider_t)margo_registered_data(mid, info->id);
     if (!provider) {
+        margo_error(mid,
+                    "%s: could not find provider "
+                    "with id %d",
+                    __func__, info->id);
         out.ret = SDSKV_ERR_UNKNOWN_PR;
         return;
     }
@@ -1672,6 +1724,10 @@ static void sdskv_exists_multi_ult(hg_handle_t handle)
     sdskv_provider_t      provider
         = (sdskv_provider_t)margo_registered_data(mid, info->id);
     if (!provider) {
+        margo_error(mid,
+                    "%s: could not find provider "
+                    "with id %d",
+                    __func__, info->id);
         out.ret = SDSKV_ERR_UNKNOWN_PR;
         return;
     }
@@ -1790,6 +1846,10 @@ static void sdskv_length_packed_ult(hg_handle_t handle)
     sdskv_provider_t      provider
         = (sdskv_provider_t)margo_registered_data(mid, info->id);
     if (!provider) {
+        margo_error(mid,
+                    "%s: could not find provider "
+                    "with id %d",
+                    __func__, info->id);
         out.ret = SDSKV_ERR_UNKNOWN_PR;
         return;
     }
@@ -1900,8 +1960,10 @@ static void sdskv_bulk_put_ult(hg_handle_t handle)
     sdskv_provider_t      provider
         = (sdskv_provider_t)margo_registered_data(mid, info->id);
     if (!provider) {
-        margo_error(
-            mid, "Error (sdskv_bulk_put_ult): SDSKV could not find provider\n");
+        margo_error(mid,
+                    "%s: could not find provider "
+                    "with id %d",
+                    __func__, info->id);
         out.ret = SDSKV_ERR_UNKNOWN_PR;
         margo_respond(handle, &out);
         margo_destroy(handle);
@@ -1985,8 +2047,10 @@ static void sdskv_bulk_get_ult(hg_handle_t handle)
     sdskv_provider_t      provider
         = (sdskv_provider_t)margo_registered_data(mid, info->id);
     if (!provider) {
-        margo_error(
-            mid, "Error (sdskv_bulk_get_ult): SDSKV could not find provider\n");
+        margo_error(mid,
+                    "%s: could not find provider "
+                    "with id %d",
+                    __func__, info->id);
         out.ret = SDSKV_ERR_UNKNOWN_PR;
         margo_respond(handle, &out);
         margo_destroy(handle);
@@ -2091,7 +2155,9 @@ static void sdskv_erase_ult(hg_handle_t handle)
         = (sdskv_provider_t)margo_registered_data(mid, info->id);
     if (!provider) {
         margo_error(mid,
-                    "Error (sdskv_erase_ult): SDSKV could not find provider\n");
+                    "%s: could not find provider "
+                    "with id %d",
+                    __func__, info->id);
         out.ret = SDSKV_ERR_UNKNOWN_PR;
         margo_respond(handle, &out);
         margo_destroy(handle);
@@ -2154,6 +2220,10 @@ static void sdskv_erase_multi_ult(hg_handle_t handle)
     sdskv_provider_t      provider
         = (sdskv_provider_t)margo_registered_data(mid, info->id);
     if (!provider) {
+        margo_error(mid,
+                    "%s: could not find provider "
+                    "with id %d",
+                    __func__, info->id);
         out.ret = SDSKV_ERR_UNKNOWN_PR;
         return;
     }
@@ -2232,8 +2302,10 @@ static void sdskv_exists_ult(hg_handle_t handle)
     sdskv_provider_t      provider
         = (sdskv_provider_t)margo_registered_data(mid, info->id);
     if (!provider) {
-        margo_error(
-            mid, "Error (sdskv_exists_ult): SDSKV could not find provider\n");
+        margo_error(mid,
+                    "%s: could not find provider "
+                    "with id %d",
+                    __func__, info->id);
         out.ret = SDSKV_ERR_UNKNOWN_PR;
         margo_respond(handle, &out);
         margo_destroy(handle);
@@ -2293,8 +2365,9 @@ static void sdskv_list_keys_ult(hg_handle_t handle)
         = (sdskv_provider_t)margo_registered_data(mid, info->id);
     if (!provider) {
         margo_error(mid,
-                    "Error (sdskv_list_keys_ult): SDSKV list_keys could not "
-                    "find provider\n");
+                    "%s: could not find provider "
+                    "with id %d",
+                    __func__, info->id);
         out.ret = SDSKV_ERR_UNKNOWN_PR;
         margo_respond(handle, &out);
         margo_destroy(handle);
@@ -2475,8 +2548,9 @@ static void sdskv_list_keyvals_ult(hg_handle_t handle)
         = (sdskv_provider_t)margo_registered_data(mid, info->id);
     if (!provider) {
         margo_error(mid,
-                    "Error (sdskv_list_keyvals_ult): SDSKV list_keyvals could "
-                    "not find provider\n");
+                    "%s: could not find provider "
+                    "with id %d",
+                    __func__, info->id);
         out.ret = SDSKV_ERR_UNKNOWN_PR;
         margo_respond(handle, &out);
         margo_destroy(handle);
@@ -2749,6 +2823,10 @@ static void sdskv_migrate_keys_ult(hg_handle_t handle)
     sdskv_provider_t      provider
         = (sdskv_provider_t)margo_registered_data(mid, info->id);
     if (!provider) {
+        margo_error(mid,
+                    "%s: could not find provider "
+                    "with id %d",
+                    __func__, info->id);
         out.ret = SDSKV_ERR_UNKNOWN_PR;
         return;
     }
@@ -2864,6 +2942,10 @@ static void sdskv_migrate_key_range_ult(hg_handle_t handle)
     sdskv_provider_t      provider
         = (sdskv_provider_t)margo_registered_data(mid, info->id);
     if (!provider) {
+        margo_error(mid,
+                    "%s: could not find provider "
+                    "with id %d",
+                    __func__, info->id);
         out.ret = SDSKV_ERR_UNKNOWN_PR;
         margo_respond(handle, &out);
         margo_destroy(handle);
@@ -2912,6 +2994,10 @@ static void sdskv_migrate_keys_prefixed_ult(hg_handle_t handle)
     sdskv_provider_t      provider
         = (sdskv_provider_t)margo_registered_data(mid, info->id);
     if (!provider) {
+        margo_error(mid,
+                    "%s: could not find provider "
+                    "with id %d",
+                    __func__, info->id);
         out.ret = SDSKV_ERR_UNKNOWN_PR;
         return;
     }
@@ -3021,6 +3107,10 @@ static void sdskv_migrate_all_keys_ult(hg_handle_t handle)
     sdskv_provider_t      provider
         = (sdskv_provider_t)margo_registered_data(mid, info->id);
     if (!provider) {
+        margo_error(mid,
+                    "%s: could not find provider "
+                    "with id %d",
+                    __func__, info->id);
         out.ret = SDSKV_ERR_UNKNOWN_PR;
         return;
     }
@@ -3135,6 +3225,10 @@ static void sdskv_migrate_database_ult(hg_handle_t handle)
         sdskv_provider_t      provider = static_cast<sdskv_provider_t>(
             margo_registered_data(mid, info->id));
         if (!provider) {
+            margo_error(mid,
+                        "%s: could not find provider "
+                        "with id %d",
+                        __func__, info->id);
             out.ret = SDSKV_ERR_UNKNOWN_PR;
             break;
         }

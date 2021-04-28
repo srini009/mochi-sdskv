@@ -35,7 +35,13 @@ function test_start_server ()
     startwait=${1:-15}
     maxtime=${2:-120}
 
-    run_to ${maxtime} bin/sdskv-server-daemon -f $TMPBASE/sdskv.addr ${SDSKV_TEST_TRANSPORT:-"na+sm"} ${@:3} &
+    if [[ -z "${SDSKV_TEST_LOG_LEVEL}" ]]; then
+      LOG_LEVEL="critical"
+    else
+      LOG_LEVEL="${SDSKV_TEST_LOG_LEVEL}"
+    fi
+
+    run_to ${maxtime} bin/sdskv-server-daemon -v ${LOG_LEVEL} -f $TMPBASE/sdskv.addr ${SDSKV_TEST_TRANSPORT:-"na+sm"} ${@:3} &
     # wait for server to start
     sleep ${startwait}
 
