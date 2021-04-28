@@ -47,6 +47,39 @@ template <typename F> inline scoped_call<F> at_exit(F&& f)
 #define ENSURE_MARGO_FREE_INPUT \
     DEFER(margo_free_input, margo_free_input(handle, &in))
 
+#define FIND_MID_AND_PROVIDER                                                  \
+    margo_instance_id     mid;                                                 \
+    sdskv_provider_t      provider;                                            \
+    const struct hg_info* info;                                                \
+    do {                                                                       \
+        mid = margo_hg_handle_get_instance(handle);                            \
+        if (!mid) {                                                            \
+            margo_critical(0,                                                  \
+                           "%s: could not get margo instance from RPC handle", \
+                           __func__);                                          \
+            exit(-1);                                                          \
+        }                                                                      \
+        info     = margo_get_info(handle);                                     \
+        provider = (sdskv_provider_t)margo_registered_data(mid, info->id);     \
+        if (!provider) {                                                       \
+            margo_error(mid, "%s: could not find provider with id %d",         \
+                        __func__, info->id);                                   \
+            out.ret = SDSKV_ERR_UNKNOWN_PR;                                    \
+            return;                                                            \
+        }                                                                      \
+    } while (0)
+
+#define GET_INPUT                                                     \
+    do {                                                              \
+        hret = margo_get_input(handle, &in);                          \
+        if (hret != HG_SUCCESS) {                                     \
+            margo_error(mid, "%s: margo_get_input failed (ret = %d)", \
+                        __func__, hret);                              \
+            out.ret = SDSKV_MAKE_HG_ERROR(hret);                      \
+            return;                                                   \
+        }                                                             \
+    } while (0)
+
 struct sdskv_server_context_t {
     margo_instance_id mid;
 
@@ -755,25 +788,8 @@ static void sdskv_open_ult(hg_handle_t handle)
     ENSURE_MARGO_DESTROY;
     ENSURE_MARGO_RESPOND;
 
-    margo_instance_id mid = margo_hg_handle_get_instance(handle);
-    assert(mid);
-    const struct hg_info* info = margo_get_info(handle);
-    sdskv_provider_t      provider
-        = (sdskv_provider_t)margo_registered_data(mid, info->id);
-    if (!provider) {
-        margo_error(mid, "%s: could not find provider with id %d", __func__,
-                    info->id);
-        out.ret = SDSKV_ERR_UNKNOWN_PR;
-        return;
-    }
-
-    hret = margo_get_input(handle, &in);
-    if (hret != HG_SUCCESS) {
-        margo_error(mid, "%s: margo_get_input failed (ret = %d)", __func__,
-                    hret);
-        out.ret = SDSKV_MAKE_HG_ERROR(hret);
-        return;
-    }
+    FIND_MID_AND_PROVIDER;
+    GET_INPUT;
     ENSURE_MARGO_FREE_INPUT;
 
     ABT_rwlock_rdlock(provider->lock);
@@ -801,20 +817,7 @@ static void sdskv_count_db_ult(hg_handle_t handle)
 
     ENSURE_MARGO_DESTROY;
     ENSURE_MARGO_RESPOND;
-
-    margo_instance_id mid = margo_hg_handle_get_instance(handle);
-    assert(mid);
-    const struct hg_info* info = margo_get_info(handle);
-    sdskv_provider_t      provider
-        = (sdskv_provider_t)margo_registered_data(mid, info->id);
-    if (!provider) {
-        margo_error(mid,
-                    "%s: could not find provider "
-                    "with id %d",
-                    __func__, info->id);
-        out.ret = SDSKV_ERR_UNKNOWN_PR;
-        return;
-    }
+    FIND_MID_AND_PROVIDER;
 
     uint64_t count;
     sdskv_provider_count_databases(provider, &count);
@@ -840,26 +843,8 @@ static void sdskv_list_db_ult(hg_handle_t handle)
 
     ENSURE_MARGO_DESTROY;
     ENSURE_MARGO_RESPOND;
-
-    margo_instance_id mid = margo_hg_handle_get_instance(handle);
-    assert(mid);
-    const struct hg_info* info = margo_get_info(handle);
-    sdskv_provider_t      provider
-        = (sdskv_provider_t)margo_registered_data(mid, info->id);
-    if (!provider) {
-        margo_error(mid,
-                    "%s: could not find provider "
-                    "with id %d",
-                    __func__, info->id);
-        out.ret = SDSKV_ERR_UNKNOWN_PR;
-        return;
-    }
-
-    hret = margo_get_input(handle, &in);
-    if (hret != HG_SUCCESS) {
-        out.ret = SDSKV_MAKE_HG_ERROR(hret);
-        return;
-    }
+    FIND_MID_AND_PROVIDER;
+    GET_INPUT;
     ENSURE_MARGO_FREE_INPUT;
 
     ABT_rwlock_rdlock(provider->lock);
@@ -887,33 +872,11 @@ static void sdskv_put_ult(hg_handle_t handle)
     put_in_t    in;
     put_out_t   out;
 
-    margo_instance_id mid = margo_hg_handle_get_instance(handle);
-    assert(mid);
-    const struct hg_info* info = margo_get_info(handle);
-    sdskv_provider_t      provider
-        = (sdskv_provider_t)margo_registered_data(mid, info->id);
-    if (!provider) {
-        margo_error(mid,
-                    "%s: could not find provider "
-                    "with id %d",
-                    __func__, info->id);
-        out.ret = SDSKV_ERR_UNKNOWN_PR;
-        margo_respond(handle, &out);
-        margo_destroy(handle);
-        return;
-    }
-
-    hret = margo_get_input(handle, &in);
-    if (hret != HG_SUCCESS) {
-        margo_error(
-            mid,
-            "Error (sdskv_put_ult): margo_get_input failed with error %d\n",
-            hret);
-        out.ret = SDSKV_MAKE_HG_ERROR(hret);
-        margo_respond(handle, &out);
-        margo_destroy(handle);
-        return;
-    }
+    ENSURE_MARGO_DESTROY;
+    ENSURE_MARGO_RESPOND;
+    FIND_MID_AND_PROVIDER;
+    GET_INPUT;
+    ENSURE_MARGO_FREE_INPUT;
 
     ABT_rwlock_rdlock(provider->lock);
     auto it = provider->databases.find(in.db_id);
@@ -922,9 +885,6 @@ static void sdskv_put_ult(hg_handle_t handle)
         margo_error(mid,
                     "Error (sdskv_put_ult): could not find target database\n");
         out.ret = SDSKV_ERR_UNKNOWN_DB;
-        margo_respond(handle, &out);
-        margo_free_input(handle, &in);
-        margo_destroy(handle);
         return;
     }
     auto db = it->second;
@@ -934,10 +894,6 @@ static void sdskv_put_ult(hg_handle_t handle)
     ds_bulk_t vdata(in.value.data, in.value.data + in.value.size);
 
     out.ret = db->put(kdata, vdata);
-
-    margo_respond(handle, &out);
-    margo_free_input(handle, &in);
-    margo_destroy(handle);
 }
 DEFINE_MARGO_RPC_HANDLER(sdskv_put_ult)
 
@@ -952,30 +908,11 @@ static void sdskv_put_multi_ult(hg_handle_t handle)
     hg_bulk_t         local_keys_bulk_handle;
     hg_bulk_t         local_vals_bulk_handle;
 
-    auto ensure_margo_destroy = at_exit([&handle]() { margo_destroy(handle); });
-    auto ensure_margo_respond
-        = at_exit([&handle, &out]() { margo_respond(handle, &out); });
-
-    margo_instance_id     mid  = margo_hg_handle_get_instance(handle);
-    const struct hg_info* info = margo_get_info(handle);
-    sdskv_provider_t      provider
-        = (sdskv_provider_t)margo_registered_data(mid, info->id);
-    if (!provider) {
-        margo_error(mid,
-                    "%s: could not find provider "
-                    "with id %d",
-                    __func__, info->id);
-        out.ret = SDSKV_ERR_UNKNOWN_PR;
-        return;
-    }
-
-    hret = margo_get_input(handle, &in);
-    if (hret != HG_SUCCESS) {
-        out.ret = SDSKV_MAKE_HG_ERROR(hret);
-        return;
-    }
-    auto ensure_margo_free_input
-        = at_exit([&handle, &in]() { margo_free_input(handle, &in); });
+    ENSURE_MARGO_DESTROY;
+    ENSURE_MARGO_RESPOND;
+    FIND_MID_AND_PROVIDER;
+    GET_INPUT;
+    ENSURE_MARGO_FREE_INPUT;
 
     ABT_rwlock_rdlock(provider->lock);
     auto it = provider->databases.find(in.db_id);
@@ -1002,9 +939,7 @@ static void sdskv_put_multi_ult(hg_handle_t handle)
         out.ret = SDSKV_MAKE_HG_ERROR(hret);
         return;
     }
-    auto ensure_margo_bulk_free_1 = at_exit([&local_keys_bulk_handle]() {
-        margo_bulk_free(local_keys_bulk_handle);
-    });
+    DEFER(margo_bulk_free_local_keys, margo_bulk_free(local_keys_bulk_handle));
 
     /* create bulk handle to receive values */
     hret = margo_bulk_create(mid, 1, vals_addr.data(), &in.vals_bulk_size,
@@ -1013,9 +948,7 @@ static void sdskv_put_multi_ult(hg_handle_t handle)
         out.ret = SDSKV_MAKE_HG_ERROR(hret);
         return;
     }
-    auto ensure_margo_bulk_free_2 = at_exit([&local_vals_bulk_handle]() {
-        margo_bulk_free(local_vals_bulk_handle);
-    });
+    DEFER(margo_bulk_free_local_vals, margo_bulk_free(local_vals_bulk_handle));
 
     /* transfer keys */
     hret = margo_bulk_transfer(mid, HG_BULK_PULL, info->addr,
@@ -1054,8 +987,6 @@ static void sdskv_put_multi_ult(hg_handle_t handle)
     }
     out.ret = db->put_multi(in.num_keys, kptrs.data(), key_sizes, vptrs.data(),
                             val_sizes);
-
-    return;
 }
 DEFINE_MARGO_RPC_HANDLER(sdskv_put_multi_ult)
 
@@ -1069,30 +1000,11 @@ static void sdskv_put_packed_ult(hg_handle_t handle)
     hg_bulk_t         local_bulk_handle;
     hg_addr_t         origin_addr = HG_ADDR_NULL;
 
-    auto ensure_margo_destroy = at_exit([&handle]() { margo_destroy(handle); });
-    auto ensure_margo_respond
-        = at_exit([&handle, &out]() { margo_respond(handle, &out); });
-
-    margo_instance_id     mid  = margo_hg_handle_get_instance(handle);
-    const struct hg_info* info = margo_get_info(handle);
-    sdskv_provider_t      provider
-        = (sdskv_provider_t)margo_registered_data(mid, info->id);
-    if (!provider) {
-        out.ret = SDSKV_ERR_UNKNOWN_PR;
-        margo_error(mid,
-                    "%s: could not find provider "
-                    "with id %d",
-                    __func__, info->id);
-        return;
-    }
-
-    hret = margo_get_input(handle, &in);
-    if (hret != HG_SUCCESS) {
-        out.ret = SDSKV_MAKE_HG_ERROR(hret);
-        return;
-    }
-    auto ensure_margo_free_input
-        = at_exit([&handle, &in]() { margo_free_input(handle, &in); });
+    ENSURE_MARGO_DESTROY;
+    ENSURE_MARGO_RESPOND;
+    FIND_MID_AND_PROVIDER;
+    GET_INPUT;
+    ENSURE_MARGO_FREE_INPUT;
 
     ABT_rwlock_rdlock(provider->lock);
     auto it = provider->databases.find(in.db_id);
@@ -1114,8 +1026,7 @@ static void sdskv_put_packed_ult(hg_handle_t handle)
         out.ret = SDSKV_MAKE_HG_ERROR(hret);
         return;
     }
-    auto ensure_margo_addr_free = at_exit(
-        [&origin_addr, &mid]() { margo_addr_free(mid, origin_addr); });
+    DEFER(margo_addr_free, margo_addr_free(mid, origin_addr));
 
     // allocate a buffer to receive the keys and a buffer to receive the values
     local_buffer.resize(in.bulk_size);
@@ -1129,8 +1040,7 @@ static void sdskv_put_packed_ult(hg_handle_t handle)
         out.ret = SDSKV_MAKE_HG_ERROR(hret);
         return;
     }
-    auto ensure_margo_bulk_free = at_exit(
-        [&local_bulk_handle]() { margo_bulk_free(local_bulk_handle); });
+    DEFER(margo_bulk_free, margo_bulk_free(local_bulk_handle));
 
     /* transfer data */
     hret = margo_bulk_transfer(mid, HG_BULK_PULL, origin_addr, in.bulk_handle,
@@ -1155,8 +1065,6 @@ static void sdskv_put_packed_ult(hg_handle_t handle)
     /* insert key/vals into the DB */
     out.ret = db->put_packed(in.num_keys, packed_keys, key_sizes, packed_vals,
                              val_sizes);
-
-    return;
 }
 DEFINE_MARGO_RPC_HANDLER(sdskv_put_packed_ult)
 
@@ -1166,32 +1074,11 @@ static void sdskv_length_ult(hg_handle_t handle)
     length_in_t  in;
     length_out_t out;
 
-    auto ensure_margo_destroy = at_exit([&handle]() { margo_destroy(handle); });
-    auto ensure_margo_respond
-        = at_exit([&handle, &out]() { margo_respond(handle, &out); });
-
-    margo_instance_id mid = margo_hg_handle_get_instance(handle);
-    assert(mid);
-    const struct hg_info* info = margo_get_info(handle);
-    sdskv_provider_t      provider
-        = (sdskv_provider_t)margo_registered_data(mid, info->id);
-    if (!provider) {
-        margo_error(mid,
-                    "%s: could not find provider "
-                    "with id %d",
-                    __func__, info->id);
-        out.ret = SDSKV_ERR_UNKNOWN_PR;
-        return;
-    }
-
-    hret = margo_get_input(handle, &in);
-    if (hret != HG_SUCCESS) {
-        out.ret = SDSKV_MAKE_HG_ERROR(hret);
-        return;
-    }
-
-    auto ensure_margo_free_input
-        = at_exit([&handle, &in]() { margo_free_input(handle, &in); });
+    ENSURE_MARGO_DESTROY;
+    ENSURE_MARGO_RESPOND;
+    FIND_MID_AND_PROVIDER;
+    GET_INPUT;
+    ENSURE_MARGO_FREE_INPUT;
 
     ABT_rwlock_rdlock(provider->lock);
     auto it = provider->databases.find(in.db_id);
@@ -1218,7 +1105,6 @@ DEFINE_MARGO_RPC_HANDLER(sdskv_length_ult)
 
 static void sdskv_get_ult(hg_handle_t handle)
 {
-
     hg_return_t hret;
     get_in_t    in;
     get_out_t   out;
@@ -1227,29 +1113,8 @@ static void sdskv_get_ult(hg_handle_t handle)
 
     ENSURE_MARGO_DESTROY;
     ENSURE_MARGO_RESPOND;
-
-    margo_instance_id mid = margo_hg_handle_get_instance(handle);
-    assert(mid);
-    const struct hg_info* info = margo_get_info(handle);
-    sdskv_provider_t      provider
-        = (sdskv_provider_t)margo_registered_data(mid, info->id);
-    if (!provider) {
-        margo_error(mid,
-                    "%s: could not find provider "
-                    "with id %d",
-                    __func__, info->id);
-        out.ret = SDSKV_ERR_UNKNOWN_PR;
-        return;
-    }
-
-    hret = margo_get_input(handle, &in);
-    if (hret != HG_SUCCESS) {
-        out.ret        = SDSKV_MAKE_HG_ERROR(hret);
-        out.value.data = nullptr;
-        out.value.size = 0;
-        out.vsize      = 0;
-        return;
-    }
+    FIND_MID_AND_PROVIDER;
+    GET_INPUT;
     ENSURE_MARGO_FREE_INPUT;
 
     ABT_rwlock_rdlock(provider->lock);
@@ -1302,23 +1167,8 @@ static void sdskv_get_multi_ult(hg_handle_t handle)
 
     ENSURE_MARGO_DESTROY;
     ENSURE_MARGO_RESPOND;
-
-    /* get margo instance and provider */
-    margo_instance_id     mid  = margo_hg_handle_get_instance(handle);
-    const struct hg_info* info = margo_get_info(handle);
-    sdskv_provider_t      provider
-        = (sdskv_provider_t)margo_registered_data(mid, info->id);
-    if (!provider) {
-        out.ret = SDSKV_ERR_UNKNOWN_PR;
-        return;
-    }
-
-    /* deserialize input */
-    hret = margo_get_input(handle, &in);
-    if (hret != HG_SUCCESS) {
-        out.ret = SDSKV_MAKE_HG_ERROR(hret);
-        return;
-    }
+    FIND_MID_AND_PROVIDER;
+    GET_INPUT;
     ENSURE_MARGO_FREE_INPUT;
 
     /* find the target database */
@@ -1418,8 +1268,6 @@ static void sdskv_get_multi_ult(hg_handle_t handle)
         out.ret = SDSKV_MAKE_HG_ERROR(hret);
         return;
     }
-
-    return;
 }
 DEFINE_MARGO_RPC_HANDLER(sdskv_get_multi_ult)
 
@@ -1438,27 +1286,8 @@ static void sdskv_get_packed_ult(hg_handle_t handle)
 
     ENSURE_MARGO_DESTROY;
     ENSURE_MARGO_RESPOND;
-
-    /* get margo instance and provider */
-    margo_instance_id     mid  = margo_hg_handle_get_instance(handle);
-    const struct hg_info* info = margo_get_info(handle);
-    sdskv_provider_t      provider
-        = (sdskv_provider_t)margo_registered_data(mid, info->id);
-    if (!provider) {
-        margo_error(mid,
-                    "%s: could not find provider "
-                    "with id %d",
-                    __func__, info->id);
-        out.ret = SDSKV_ERR_UNKNOWN_PR;
-        return;
-    }
-
-    /* deserialize input */
-    hret = margo_get_input(handle, &in);
-    if (hret != HG_SUCCESS) {
-        out.ret = SDSKV_MAKE_HG_ERROR(hret);
-        return;
-    }
+    FIND_MID_AND_PROVIDER;
+    GET_INPUT;
     ENSURE_MARGO_FREE_INPUT;
 
     /* find the target database */
@@ -1574,27 +1403,8 @@ static void sdskv_length_multi_ult(hg_handle_t handle)
 
     ENSURE_MARGO_DESTROY;
     ENSURE_MARGO_RESPOND;
-
-    /* get margo instance and provider */
-    margo_instance_id     mid  = margo_hg_handle_get_instance(handle);
-    const struct hg_info* info = margo_get_info(handle);
-    sdskv_provider_t      provider
-        = (sdskv_provider_t)margo_registered_data(mid, info->id);
-    if (!provider) {
-        margo_error(mid,
-                    "%s: could not find provider "
-                    "with id %d",
-                    __func__, info->id);
-        out.ret = SDSKV_ERR_UNKNOWN_PR;
-        return;
-    }
-
-    /* deserialize input */
-    hret = margo_get_input(handle, &in);
-    if (hret != HG_SUCCESS) {
-        out.ret = SDSKV_MAKE_HG_ERROR(hret);
-        return;
-    }
+    FIND_MID_AND_PROVIDER;
+    GET_INPUT;
     ENSURE_MARGO_FREE_INPUT;
 
     /* find the target database */
@@ -1691,27 +1501,8 @@ static void sdskv_exists_multi_ult(hg_handle_t handle)
 
     ENSURE_MARGO_DESTROY;
     ENSURE_MARGO_RESPOND;
-
-    /* get margo instance and provider */
-    margo_instance_id     mid  = margo_hg_handle_get_instance(handle);
-    const struct hg_info* info = margo_get_info(handle);
-    sdskv_provider_t      provider
-        = (sdskv_provider_t)margo_registered_data(mid, info->id);
-    if (!provider) {
-        margo_error(mid,
-                    "%s: could not find provider "
-                    "with id %d",
-                    __func__, info->id);
-        out.ret = SDSKV_ERR_UNKNOWN_PR;
-        return;
-    }
-
-    /* deserialize input */
-    hret = margo_get_input(handle, &in);
-    if (hret != HG_SUCCESS) {
-        out.ret = SDSKV_MAKE_HG_ERROR(hret);
-        return;
-    }
+    FIND_MID_AND_PROVIDER;
+    GET_INPUT;
     ENSURE_MARGO_FREE_INPUT;
 
     /* find the target database */
@@ -1808,27 +1599,8 @@ static void sdskv_length_packed_ult(hg_handle_t handle)
 
     ENSURE_MARGO_DESTROY;
     ENSURE_MARGO_RESPOND;
-
-    /* get margo instance and provider */
-    margo_instance_id     mid  = margo_hg_handle_get_instance(handle);
-    const struct hg_info* info = margo_get_info(handle);
-    sdskv_provider_t      provider
-        = (sdskv_provider_t)margo_registered_data(mid, info->id);
-    if (!provider) {
-        margo_error(mid,
-                    "%s: could not find provider "
-                    "with id %d",
-                    __func__, info->id);
-        out.ret = SDSKV_ERR_UNKNOWN_PR;
-        return;
-    }
-
-    /* deserialize input */
-    hret = margo_get_input(handle, &in);
-    if (hret != HG_SUCCESS) {
-        out.ret = SDSKV_MAKE_HG_ERROR(hret);
-        return;
-    }
+    FIND_MID_AND_PROVIDER;
+    GET_INPUT;
     ENSURE_MARGO_FREE_INPUT;
 
     /* find the target database */
@@ -1920,26 +1692,8 @@ static void sdskv_bulk_put_ult(hg_handle_t handle)
 
     ENSURE_MARGO_DESTROY;
     ENSURE_MARGO_RESPOND;
-
-    margo_instance_id mid = margo_hg_handle_get_instance(handle);
-    assert(mid);
-    const struct hg_info* info = margo_get_info(handle);
-    sdskv_provider_t      provider
-        = (sdskv_provider_t)margo_registered_data(mid, info->id);
-    if (!provider) {
-        margo_error(mid,
-                    "%s: could not find provider "
-                    "with id %d",
-                    __func__, info->id);
-        out.ret = SDSKV_ERR_UNKNOWN_PR;
-        return;
-    }
-
-    hret = margo_get_input(handle, &in);
-    if (hret != HG_SUCCESS) {
-        out.ret = SDSKV_MAKE_HG_ERROR(hret);
-        return;
-    }
+    FIND_MID_AND_PROVIDER;
+    GET_INPUT;
     ENSURE_MARGO_FREE_INPUT;
 
     ABT_rwlock_rdlock(provider->lock);
@@ -1990,26 +1744,8 @@ static void sdskv_bulk_get_ult(hg_handle_t handle)
 
     ENSURE_MARGO_DESTROY;
     ENSURE_MARGO_RESPOND;
-
-    margo_instance_id mid = margo_hg_handle_get_instance(handle);
-    assert(mid);
-    const struct hg_info* info = margo_get_info(handle);
-    sdskv_provider_t      provider
-        = (sdskv_provider_t)margo_registered_data(mid, info->id);
-    if (!provider) {
-        margo_error(mid,
-                    "%s: could not find provider "
-                    "with id %d",
-                    __func__, info->id);
-        out.ret = SDSKV_ERR_UNKNOWN_PR;
-        return;
-    }
-
-    hret = margo_get_input(handle, &in);
-    if (hret != HG_SUCCESS) {
-        out.ret = SDSKV_MAKE_HG_ERROR(hret);
-        return;
-    }
+    FIND_MID_AND_PROVIDER;
+    GET_INPUT;
     ENSURE_MARGO_FREE_INPUT;
 
     ABT_rwlock_rdlock(provider->lock);
@@ -2074,26 +1810,8 @@ static void sdskv_erase_ult(hg_handle_t handle)
 
     ENSURE_MARGO_DESTROY;
     ENSURE_MARGO_RESPOND;
-
-    margo_instance_id mid = margo_hg_handle_get_instance(handle);
-    assert(mid);
-    const struct hg_info* info = margo_get_info(handle);
-    sdskv_provider_t      provider
-        = (sdskv_provider_t)margo_registered_data(mid, info->id);
-    if (!provider) {
-        margo_error(mid,
-                    "%s: could not find provider "
-                    "with id %d",
-                    __func__, info->id);
-        out.ret = SDSKV_ERR_UNKNOWN_PR;
-        return;
-    }
-
-    hret = margo_get_input(handle, &in);
-    if (hret != HG_SUCCESS) {
-        out.ret = SDSKV_MAKE_HG_ERROR(hret);
-        return;
-    }
+    FIND_MID_AND_PROVIDER;
+    GET_INPUT;
     ENSURE_MARGO_FREE_INPUT;
 
     ABT_rwlock_rdlock(provider->lock);
@@ -2128,27 +1846,8 @@ static void sdskv_erase_multi_ult(hg_handle_t handle)
 
     ENSURE_MARGO_DESTROY;
     ENSURE_MARGO_RESPOND;
-
-    /* get margo instance and provider */
-    margo_instance_id     mid  = margo_hg_handle_get_instance(handle);
-    const struct hg_info* info = margo_get_info(handle);
-    sdskv_provider_t      provider
-        = (sdskv_provider_t)margo_registered_data(mid, info->id);
-    if (!provider) {
-        margo_error(mid,
-                    "%s: could not find provider "
-                    "with id %d",
-                    __func__, info->id);
-        out.ret = SDSKV_ERR_UNKNOWN_PR;
-        return;
-    }
-
-    /* deserialize input */
-    hret = margo_get_input(handle, &in);
-    if (hret != HG_SUCCESS) {
-        out.ret = SDSKV_MAKE_HG_ERROR(hret);
-        return;
-    }
+    FIND_MID_AND_PROVIDER;
+    GET_INPUT;
     ENSURE_MARGO_FREE_INPUT;
 
     /* find the target database */
@@ -2209,26 +1908,8 @@ static void sdskv_exists_ult(hg_handle_t handle)
 
     ENSURE_MARGO_DESTROY;
     ENSURE_MARGO_RESPOND;
-
-    margo_instance_id mid = margo_hg_handle_get_instance(handle);
-    assert(mid);
-    const struct hg_info* info = margo_get_info(handle);
-    sdskv_provider_t      provider
-        = (sdskv_provider_t)margo_registered_data(mid, info->id);
-    if (!provider) {
-        margo_error(mid,
-                    "%s: could not find provider "
-                    "with id %d",
-                    __func__, info->id);
-        out.ret = SDSKV_ERR_UNKNOWN_PR;
-        return;
-    }
-
-    hret = margo_get_input(handle, &in);
-    if (hret != HG_SUCCESS) {
-        out.ret = SDSKV_MAKE_HG_ERROR(hret);
-        return;
-    }
+    FIND_MID_AND_PROVIDER;
+    GET_INPUT;
     ENSURE_MARGO_FREE_INPUT;
 
     ABT_rwlock_rdlock(provider->lock);
@@ -2262,29 +1943,8 @@ static void sdskv_list_keys_ult(hg_handle_t handle)
 
     ENSURE_MARGO_DESTROY;
     ENSURE_MARGO_RESPOND;
-
-    /* get the provider handling this request */
-    margo_instance_id mid = margo_hg_handle_get_instance(handle);
-    assert(mid);
-    const struct hg_info* info = margo_get_info(handle);
-    sdskv_provider_t      provider
-        = (sdskv_provider_t)margo_registered_data(mid, info->id);
-    if (!provider) {
-        margo_error(mid,
-                    "%s: could not find provider "
-                    "with id %d",
-                    __func__, info->id);
-        out.ret = SDSKV_ERR_UNKNOWN_PR;
-        return;
-    }
-
-    /* get the input */
-    hret = margo_get_input(handle, &in);
-    if (hret != HG_SUCCESS) {
-        margo_error(mid, "Error: SDSKV list_keys could not get RPC input\n");
-        out.ret = SDSKV_MAKE_HG_ERROR(hret);
-        return;
-    }
+    FIND_MID_AND_PROVIDER;
+    GET_INPUT;
     ENSURE_MARGO_FREE_INPUT;
 
     /* find the database targeted */
@@ -2441,29 +2101,8 @@ static void sdskv_list_keyvals_ult(hg_handle_t handle)
 
     ENSURE_MARGO_DESTROY;
     ENSURE_MARGO_RESPOND;
-
-    /* get the provider handling this request */
-    margo_instance_id mid = margo_hg_handle_get_instance(handle);
-    assert(mid);
-    const struct hg_info* info = margo_get_info(handle);
-    sdskv_provider_t      provider
-        = (sdskv_provider_t)margo_registered_data(mid, info->id);
-    if (!provider) {
-        margo_error(mid,
-                    "%s: could not find provider "
-                    "with id %d",
-                    __func__, info->id);
-        out.ret = SDSKV_ERR_UNKNOWN_PR;
-        return;
-    }
-
-    /* get the input */
-    hret = margo_get_input(handle, &in);
-    if (hret != HG_SUCCESS) {
-        margo_error(mid, "Error: SDSKV list_keyvals could not get RPC input\n");
-        out.ret = SDSKV_MAKE_HG_ERROR(hret);
-        return;
-    }
+    FIND_MID_AND_PROVIDER;
+    GET_INPUT;
     ENSURE_MARGO_FREE_INPUT;
 
     /* find the database targeted */
@@ -2712,28 +2351,10 @@ static void sdskv_migrate_keys_ult(hg_handle_t handle)
 
     ENSURE_MARGO_DESTROY;
     ENSURE_MARGO_RESPOND;
+    FIND_MID_AND_PROVIDER;
+    GET_INPUT;
+    ENSURE_MARGO_FREE_INPUT;
 
-    /* get the provider handling this request */
-    margo_instance_id     mid  = margo_hg_handle_get_instance(handle);
-    const struct hg_info* info = margo_get_info(handle);
-    sdskv_provider_t      provider
-        = (sdskv_provider_t)margo_registered_data(mid, info->id);
-    if (!provider) {
-        margo_error(mid,
-                    "%s: could not find provider "
-                    "with id %d",
-                    __func__, info->id);
-        out.ret = SDSKV_ERR_UNKNOWN_PR;
-        return;
-    }
-
-    /* get the input */
-    hret = margo_get_input(handle, &in);
-    if (hret != HG_SUCCESS) {
-        out.ret = SDSKV_MAKE_HG_ERROR(hret);
-        return;
-    }
-    auto r2 = at_exit([&handle, &in]() { margo_free_input(handle, &in); });
     /* find the source database */
     ABT_rwlock_rdlock(provider->lock);
     auto it = provider->databases.find(in.source_db_id);
@@ -2837,27 +2458,8 @@ static void sdskv_migrate_key_range_ult(hg_handle_t handle)
 
     ENSURE_MARGO_DESTROY;
     ENSURE_MARGO_RESPOND;
-
-    /* get the provider handling this request */
-    margo_instance_id     mid  = margo_hg_handle_get_instance(handle);
-    const struct hg_info* info = margo_get_info(handle);
-    sdskv_provider_t      provider
-        = (sdskv_provider_t)margo_registered_data(mid, info->id);
-    if (!provider) {
-        margo_error(mid,
-                    "%s: could not find provider "
-                    "with id %d",
-                    __func__, info->id);
-        out.ret = SDSKV_ERR_UNKNOWN_PR;
-        return;
-    }
-
-    /* get the input */
-    hret = margo_get_input(handle, &in);
-    if (hret != HG_SUCCESS) {
-        out.ret = SDSKV_MAKE_HG_ERROR(hret);
-        return;
-    }
+    FIND_MID_AND_PROVIDER;
+    GET_INPUT;
     ENSURE_MARGO_FREE_INPUT;
 
     /* lock the provider */
@@ -2877,27 +2479,8 @@ static void sdskv_migrate_keys_prefixed_ult(hg_handle_t handle)
 
     ENSURE_MARGO_DESTROY;
     ENSURE_MARGO_RESPOND;
-
-    /* get the provider handling this request */
-    margo_instance_id     mid  = margo_hg_handle_get_instance(handle);
-    const struct hg_info* info = margo_get_info(handle);
-    sdskv_provider_t      provider
-        = (sdskv_provider_t)margo_registered_data(mid, info->id);
-    if (!provider) {
-        margo_error(mid,
-                    "%s: could not find provider "
-                    "with id %d",
-                    __func__, info->id);
-        out.ret = SDSKV_ERR_UNKNOWN_PR;
-        return;
-    }
-
-    /* get the input */
-    hret = margo_get_input(handle, &in);
-    if (hret != HG_SUCCESS) {
-        out.ret = SDSKV_MAKE_HG_ERROR(hret);
-        return;
-    }
+    FIND_MID_AND_PROVIDER;
+    GET_INPUT;
     ENSURE_MARGO_FREE_INPUT;
 
     /* find the source database */
@@ -2988,27 +2571,8 @@ static void sdskv_migrate_all_keys_ult(hg_handle_t handle)
 
     ENSURE_MARGO_DESTROY;
     ENSURE_MARGO_RESPOND;
-
-    /* get the provider handling this request */
-    margo_instance_id     mid  = margo_hg_handle_get_instance(handle);
-    const struct hg_info* info = margo_get_info(handle);
-    sdskv_provider_t      provider
-        = (sdskv_provider_t)margo_registered_data(mid, info->id);
-    if (!provider) {
-        margo_error(mid,
-                    "%s: could not find provider "
-                    "with id %d",
-                    __func__, info->id);
-        out.ret = SDSKV_ERR_UNKNOWN_PR;
-        return;
-    }
-
-    /* get the input */
-    hret = margo_get_input(handle, &in);
-    if (hret != HG_SUCCESS) {
-        out.ret = SDSKV_MAKE_HG_ERROR(hret);
-        return;
-    }
+    FIND_MID_AND_PROVIDER;
+    GET_INPUT;
     ENSURE_MARGO_FREE_INPUT;
 
     /* find the source database */
@@ -3096,7 +2660,6 @@ static void sdskv_migrate_database_ult(hg_handle_t handle)
     migrate_database_out_t out;
     hg_addr_t              dest_addr = HG_ADDR_NULL;
     hg_return_t            hret;
-    margo_instance_id      mid;
     int                    ret;
 #ifdef USE_REMI
     remi_provider_handle_t remi_ph       = REMI_PROVIDER_HANDLE_NULL;
@@ -3107,26 +2670,8 @@ static void sdskv_migrate_database_ult(hg_handle_t handle)
 
     ENSURE_MARGO_DESTROY;
     ENSURE_MARGO_RESPOND;
-
-    mid = margo_hg_handle_get_instance(handle);
-    assert(mid);
-    const struct hg_info* info = margo_get_info(handle);
-    sdskv_provider_t      provider
-        = static_cast<sdskv_provider_t>(margo_registered_data(mid, info->id));
-    if (!provider) {
-        margo_error(mid,
-                    "%s: could not find provider "
-                    "with id %d",
-                    __func__, info->id);
-        out.ret = SDSKV_ERR_UNKNOWN_PR;
-        return;
-    }
-
-    hret = margo_get_input(handle, &in);
-    if (hret != HG_SUCCESS) {
-        out.ret = SDSKV_MAKE_HG_ERROR(hret);
-        return;
-    }
+    FIND_MID_AND_PROVIDER;
+    GET_INPUT;
     ENSURE_MARGO_FREE_INPUT;
 
 #ifdef USE_REMI
