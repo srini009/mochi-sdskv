@@ -47,38 +47,49 @@ template <typename F> inline scoped_call<F> at_exit(F&& f)
 #define ENSURE_MARGO_FREE_INPUT \
     DEFER(margo_free_input, margo_free_input(handle, &in))
 
-#define FIND_MID_AND_PROVIDER                                                  \
-    margo_instance_id     mid;                                                 \
-    sdskv_provider_t      provider;                                            \
-    const struct hg_info* info;                                                \
-    do {                                                                       \
-        mid = margo_hg_handle_get_instance(handle);                            \
-        if (!mid) {                                                            \
-            margo_critical(0,                                                  \
-                           "%s: could not get margo instance from RPC handle", \
-                           __func__);                                          \
-            exit(-1);                                                          \
-        }                                                                      \
-        info     = margo_get_info(handle);                                     \
-        provider = (sdskv_provider_t)margo_registered_data(mid, info->id);     \
-        if (!provider) {                                                       \
-            margo_error(mid, "%s: could not find provider with id %d",         \
-                        __func__, info->id);                                   \
-            out.ret = SDSKV_ERR_UNKNOWN_PR;                                    \
-            return;                                                            \
-        }                                                                      \
+#define FIND_MID_AND_PROVIDER                                              \
+    margo_instance_id     mid;                                             \
+    sdskv_provider_t      provider;                                        \
+    const struct hg_info* info;                                            \
+    do {                                                                   \
+        mid = margo_hg_handle_get_instance(handle);                        \
+        if (!mid) {                                                        \
+            margo_critical(                                                \
+                0, "%s:%d: could not get margo instance from RPC handle",  \
+                __func__, __LINE__);                                       \
+            exit(-1);                                                      \
+        }                                                                  \
+        info     = margo_get_info(handle);                                 \
+        provider = (sdskv_provider_t)margo_registered_data(mid, info->id); \
+        if (!provider) {                                                   \
+            margo_error(mid, "%s:%d: could not find provider with id %d",  \
+                        __func__, __LINE__, info->id);                     \
+            out.ret = SDSKV_ERR_UNKNOWN_PR;                                \
+            return;                                                        \
+        }                                                                  \
     } while (0)
 
-#define GET_INPUT                                                     \
-    do {                                                              \
-        hret = margo_get_input(handle, &in);                          \
-        if (hret != HG_SUCCESS) {                                     \
-            margo_error(mid, "%s: margo_get_input failed (ret = %d)", \
-                        __func__, hret);                              \
-            out.ret = SDSKV_MAKE_HG_ERROR(hret);                      \
-            return;                                                   \
-        }                                                             \
+#define GET_INPUT                                                        \
+    do {                                                                 \
+        hret = margo_get_input(handle, &in);                             \
+        if (hret != HG_SUCCESS) {                                        \
+            margo_error(mid, "%s:%d: margo_get_input failed (ret = %d)", \
+                        __func__, __LINE__, hret);                       \
+            out.ret = SDSKV_MAKE_HG_ERROR(hret);                         \
+            return;                                                      \
+        }                                                                \
     } while (0)
+
+#define FIND_DATABASE                             \
+    ABT_rwlock_rdlock(provider->lock);            \
+    auto it = provider->databases.find(in.db_id); \
+    if (it == provider->databases.end()) {        \
+        ABT_rwlock_unlock(provider->lock);        \
+        out.ret = SDSKV_ERR_UNKNOWN_DB;           \
+        return;                                   \
+    }                                             \
+    auto db = it->second;                         \
+    ABT_rwlock_unlock(provider->lock)
 
 struct sdskv_server_context_t {
     margo_instance_id mid;
@@ -877,18 +888,7 @@ static void sdskv_put_ult(hg_handle_t handle)
     FIND_MID_AND_PROVIDER;
     GET_INPUT;
     ENSURE_MARGO_FREE_INPUT;
-
-    ABT_rwlock_rdlock(provider->lock);
-    auto it = provider->databases.find(in.db_id);
-    if (it == provider->databases.end()) {
-        ABT_rwlock_unlock(provider->lock);
-        margo_error(mid,
-                    "Error (sdskv_put_ult): could not find target database\n");
-        out.ret = SDSKV_ERR_UNKNOWN_DB;
-        return;
-    }
-    auto db = it->second;
-    ABT_rwlock_unlock(provider->lock);
+    FIND_DATABASE;
 
     ds_bulk_t kdata(in.key.data, in.key.data + in.key.size);
     ds_bulk_t vdata(in.value.data, in.value.data + in.value.size);
@@ -913,16 +913,7 @@ static void sdskv_put_multi_ult(hg_handle_t handle)
     FIND_MID_AND_PROVIDER;
     GET_INPUT;
     ENSURE_MARGO_FREE_INPUT;
-
-    ABT_rwlock_rdlock(provider->lock);
-    auto it = provider->databases.find(in.db_id);
-    if (it == provider->databases.end()) {
-        ABT_rwlock_unlock(provider->lock);
-        out.ret = SDSKV_ERR_UNKNOWN_DB;
-        return;
-    }
-    auto db = it->second;
-    ABT_rwlock_unlock(provider->lock);
+    FIND_DATABASE;
 
     // allocate a buffer to receive the keys and a buffer to receive the values
     local_keys_buffer.resize(in.keys_bulk_size);
@@ -1005,16 +996,7 @@ static void sdskv_put_packed_ult(hg_handle_t handle)
     FIND_MID_AND_PROVIDER;
     GET_INPUT;
     ENSURE_MARGO_FREE_INPUT;
-
-    ABT_rwlock_rdlock(provider->lock);
-    auto it = provider->databases.find(in.db_id);
-    if (it == provider->databases.end()) {
-        ABT_rwlock_unlock(provider->lock);
-        out.ret = SDSKV_ERR_UNKNOWN_DB;
-        return;
-    }
-    auto db = it->second;
-    ABT_rwlock_unlock(provider->lock);
+    FIND_DATABASE;
 
     // find out the address of the origin
     if (in.origin_addr != NULL) {
@@ -1079,16 +1061,7 @@ static void sdskv_length_ult(hg_handle_t handle)
     FIND_MID_AND_PROVIDER;
     GET_INPUT;
     ENSURE_MARGO_FREE_INPUT;
-
-    ABT_rwlock_rdlock(provider->lock);
-    auto it = provider->databases.find(in.db_id);
-    if (it == provider->databases.end()) {
-        ABT_rwlock_unlock(provider->lock);
-        out.ret = SDSKV_ERR_UNKNOWN_DB;
-        return;
-    }
-    auto db = it->second;
-    ABT_rwlock_unlock(provider->lock);
+    FIND_DATABASE;
 
     ds_bulk_t kdata(in.key.data, in.key.data + in.key.size);
 
@@ -1111,24 +1084,14 @@ static void sdskv_get_ult(hg_handle_t handle)
     ds_bulk_t   kdata;
     ds_bulk_t   vdata;
 
+    memset(&out, 0, sizeof(out));
+
     ENSURE_MARGO_DESTROY;
     ENSURE_MARGO_RESPOND;
     FIND_MID_AND_PROVIDER;
     GET_INPUT;
     ENSURE_MARGO_FREE_INPUT;
-
-    ABT_rwlock_rdlock(provider->lock);
-    auto it = provider->databases.find(in.db_id);
-    if (it == provider->databases.end()) {
-        ABT_rwlock_unlock(provider->lock);
-        out.ret        = SDSKV_ERR_UNKNOWN_DB;
-        out.value.data = nullptr;
-        out.value.size = 0;
-        out.vsize      = 0;
-        return;
-    }
-    auto db = it->second;
-    ABT_rwlock_unlock(provider->lock);
+    FIND_DATABASE;
 
     kdata = ds_bulk_t(in.key.data, in.key.data + in.key.size);
 
@@ -1170,17 +1133,7 @@ static void sdskv_get_multi_ult(hg_handle_t handle)
     FIND_MID_AND_PROVIDER;
     GET_INPUT;
     ENSURE_MARGO_FREE_INPUT;
-
-    /* find the target database */
-    ABT_rwlock_rdlock(provider->lock);
-    auto it = provider->databases.find(in.db_id);
-    if (it == provider->databases.end()) {
-        ABT_rwlock_unlock(provider->lock);
-        out.ret = SDSKV_ERR_UNKNOWN_DB;
-        return;
-    }
-    auto db = it->second;
-    ABT_rwlock_unlock(provider->lock);
+    FIND_DATABASE;
 
     /* allocate buffers to receive the keys */
     local_keys_buffer.resize(in.keys_bulk_size);
@@ -1289,17 +1242,7 @@ static void sdskv_get_packed_ult(hg_handle_t handle)
     FIND_MID_AND_PROVIDER;
     GET_INPUT;
     ENSURE_MARGO_FREE_INPUT;
-
-    /* find the target database */
-    ABT_rwlock_rdlock(provider->lock);
-    auto it = provider->databases.find(in.db_id);
-    if (it == provider->databases.end()) {
-        ABT_rwlock_unlock(provider->lock);
-        out.ret = SDSKV_ERR_UNKNOWN_DB;
-        return;
-    }
-    auto db = it->second;
-    ABT_rwlock_unlock(provider->lock);
+    FIND_DATABASE;
 
     /* allocate buffers to receive the keys */
     local_keys_buffer.resize(in.keys_bulk_size);
@@ -1406,17 +1349,7 @@ static void sdskv_length_multi_ult(hg_handle_t handle)
     FIND_MID_AND_PROVIDER;
     GET_INPUT;
     ENSURE_MARGO_FREE_INPUT;
-
-    /* find the target database */
-    ABT_rwlock_rdlock(provider->lock);
-    auto it = provider->databases.find(in.db_id);
-    if (it == provider->databases.end()) {
-        ABT_rwlock_unlock(provider->lock);
-        out.ret = SDSKV_ERR_UNKNOWN_DB;
-        return;
-    }
-    auto db = it->second;
-    ABT_rwlock_unlock(provider->lock);
+    FIND_DATABASE;
 
     /* allocate buffers to receive the keys */
     local_keys_buffer.resize(in.keys_bulk_size);
@@ -1504,17 +1437,7 @@ static void sdskv_exists_multi_ult(hg_handle_t handle)
     FIND_MID_AND_PROVIDER;
     GET_INPUT;
     ENSURE_MARGO_FREE_INPUT;
-
-    /* find the target database */
-    ABT_rwlock_rdlock(provider->lock);
-    auto it = provider->databases.find(in.db_id);
-    if (it == provider->databases.end()) {
-        ABT_rwlock_unlock(provider->lock);
-        out.ret = SDSKV_ERR_UNKNOWN_DB;
-        return;
-    }
-    auto db = it->second;
-    ABT_rwlock_unlock(provider->lock);
+    FIND_DATABASE;
 
     /* allocate buffers to receive the keys */
     local_keys_buffer.resize(in.keys_bulk_size);
@@ -1602,17 +1525,7 @@ static void sdskv_length_packed_ult(hg_handle_t handle)
     FIND_MID_AND_PROVIDER;
     GET_INPUT;
     ENSURE_MARGO_FREE_INPUT;
-
-    /* find the target database */
-    ABT_rwlock_rdlock(provider->lock);
-    auto it = provider->databases.find(in.db_id);
-    if (it == provider->databases.end()) {
-        ABT_rwlock_unlock(provider->lock);
-        out.ret = SDSKV_ERR_UNKNOWN_DB;
-        return;
-    }
-    auto db = it->second;
-    ABT_rwlock_unlock(provider->lock);
+    FIND_DATABASE;
 
     /* allocate buffers to receive the keys and key sizes*/
     local_keys_buffer.resize(in.in_bulk_size);
@@ -1695,16 +1608,7 @@ static void sdskv_bulk_put_ult(hg_handle_t handle)
     FIND_MID_AND_PROVIDER;
     GET_INPUT;
     ENSURE_MARGO_FREE_INPUT;
-
-    ABT_rwlock_rdlock(provider->lock);
-    auto it = provider->databases.find(in.db_id);
-    if (it == provider->databases.end()) {
-        ABT_rwlock_unlock(provider->lock);
-        out.ret = SDSKV_ERR_UNKNOWN_DB;
-        return;
-    }
-    auto db = it->second;
-    ABT_rwlock_unlock(provider->lock);
+    FIND_DATABASE;
 
     ds_bulk_t vdata(in.vsize);
 
@@ -1747,16 +1651,7 @@ static void sdskv_bulk_get_ult(hg_handle_t handle)
     FIND_MID_AND_PROVIDER;
     GET_INPUT;
     ENSURE_MARGO_FREE_INPUT;
-
-    ABT_rwlock_rdlock(provider->lock);
-    auto it = provider->databases.find(in.db_id);
-    if (it == provider->databases.end()) {
-        ABT_rwlock_unlock(provider->lock);
-        out.ret = SDSKV_ERR_UNKNOWN_DB;
-        return;
-    }
-    auto db = it->second;
-    ABT_rwlock_unlock(provider->lock);
+    FIND_DATABASE;
 
     ds_bulk_t kdata(in.key.data, in.key.data + in.key.size);
 
@@ -1813,16 +1708,7 @@ static void sdskv_erase_ult(hg_handle_t handle)
     FIND_MID_AND_PROVIDER;
     GET_INPUT;
     ENSURE_MARGO_FREE_INPUT;
-
-    ABT_rwlock_rdlock(provider->lock);
-    auto it = provider->databases.find(in.db_id);
-    if (it == provider->databases.end()) {
-        ABT_rwlock_unlock(provider->lock);
-        out.ret = SDSKV_ERR_UNKNOWN_DB;
-        return;
-    }
-    auto db = it->second;
-    ABT_rwlock_unlock(provider->lock);
+    FIND_DATABASE;
 
     ds_bulk_t kdata(in.key.data, in.key.data + in.key.size);
 
@@ -1849,17 +1735,7 @@ static void sdskv_erase_multi_ult(hg_handle_t handle)
     FIND_MID_AND_PROVIDER;
     GET_INPUT;
     ENSURE_MARGO_FREE_INPUT;
-
-    /* find the target database */
-    ABT_rwlock_rdlock(provider->lock);
-    auto it = provider->databases.find(in.db_id);
-    if (it == provider->databases.end()) {
-        ABT_rwlock_unlock(provider->lock);
-        out.ret = SDSKV_ERR_UNKNOWN_DB;
-        return;
-    }
-    auto db = it->second;
-    ABT_rwlock_unlock(provider->lock);
+    FIND_DATABASE;
 
     /* allocate buffers to receive the keys */
     local_keys_buffer.resize(in.keys_bulk_size);
@@ -1911,16 +1787,7 @@ static void sdskv_exists_ult(hg_handle_t handle)
     FIND_MID_AND_PROVIDER;
     GET_INPUT;
     ENSURE_MARGO_FREE_INPUT;
-
-    ABT_rwlock_rdlock(provider->lock);
-    auto it = provider->databases.find(in.db_id);
-    if (it == provider->databases.end()) {
-        ABT_rwlock_unlock(provider->lock);
-        out.ret = SDSKV_ERR_UNKNOWN_DB;
-        return;
-    }
-    auto db = it->second;
-    ABT_rwlock_unlock(provider->lock);
+    FIND_DATABASE;
 
     ds_bulk_t kdata(in.key.data, in.key.data + in.key.size);
 
@@ -1946,20 +1813,7 @@ static void sdskv_list_keys_ult(hg_handle_t handle)
     FIND_MID_AND_PROVIDER;
     GET_INPUT;
     ENSURE_MARGO_FREE_INPUT;
-
-    /* find the database targeted */
-    ABT_rwlock_rdlock(provider->lock);
-    auto it = provider->databases.find(in.db_id);
-    if (it == provider->databases.end()) {
-        margo_error(
-            mid, "Error: SDSKV list_keys could not get database with id %ld\n",
-            in.db_id);
-        ABT_rwlock_unlock(provider->lock);
-        out.ret = SDSKV_ERR_UNKNOWN_DB;
-        return;
-    }
-    auto db = it->second;
-    ABT_rwlock_unlock(provider->lock);
+    FIND_DATABASE;
 
     /* create a bulk handle to receive and send key sizes from client */
     std::vector<hg_size_t> ksizes(in.max_keys);
@@ -2104,21 +1958,7 @@ static void sdskv_list_keyvals_ult(hg_handle_t handle)
     FIND_MID_AND_PROVIDER;
     GET_INPUT;
     ENSURE_MARGO_FREE_INPUT;
-
-    /* find the database targeted */
-    ABT_rwlock_rdlock(provider->lock);
-    auto it = provider->databases.find(in.db_id);
-    if (it == provider->databases.end()) {
-        margo_error(mid,
-                    "Error: SDSKV list_keyvals could not get database with "
-                    "id %ld\n",
-                    in.db_id);
-        ABT_rwlock_unlock(provider->lock);
-        out.ret = SDSKV_ERR_UNKNOWN_DB;
-        return;
-    }
-    auto db = it->second;
-    ABT_rwlock_unlock(provider->lock);
+    FIND_DATABASE;
 
     /* create a bulk handle to receive and send key sizes from client */
     std::vector<hg_size_t> ksizes(in.max_keys);
@@ -2355,7 +2195,6 @@ static void sdskv_migrate_keys_ult(hg_handle_t handle)
     GET_INPUT;
     ENSURE_MARGO_FREE_INPUT;
 
-    /* find the source database */
     ABT_rwlock_rdlock(provider->lock);
     auto it = provider->databases.find(in.source_db_id);
     if (it == provider->databases.end()) {
@@ -2363,7 +2202,7 @@ static void sdskv_migrate_keys_ult(hg_handle_t handle)
         out.ret = SDSKV_ERR_UNKNOWN_DB;
         return;
     }
-    auto database = it->second;
+    auto db = it->second;
     ABT_rwlock_unlock(provider->lock);
 
     /* lookup the address of the target provider */
@@ -2421,7 +2260,7 @@ static void sdskv_migrate_keys_ult(hg_handle_t handle)
 
         ds_bulk_t kdata(key, key + size);
         ds_bulk_t vdata;
-        auto      b = database->get(kdata, vdata);
+        auto      b = db->get(kdata, vdata);
         if (!b) continue;
 
         /* issue a "put" for that key */
@@ -2445,7 +2284,7 @@ static void sdskv_migrate_keys_ult(hg_handle_t handle)
         }
         margo_free_output(put_handle, &out);
         /* remove the key if needed */
-        if (in.flag == SDSKV_REMOVE_ORIGINAL) { database->erase(kdata); }
+        if (in.flag == SDSKV_REMOVE_ORIGINAL) { db->erase(kdata); }
     }
 }
 DEFINE_MARGO_RPC_HANDLER(sdskv_migrate_keys_ult)
@@ -2461,6 +2300,16 @@ static void sdskv_migrate_key_range_ult(hg_handle_t handle)
     FIND_MID_AND_PROVIDER;
     GET_INPUT;
     ENSURE_MARGO_FREE_INPUT;
+
+    ABT_rwlock_rdlock(provider->lock);
+    auto it = provider->databases.find(in.source_db_id);
+    if (it == provider->databases.end()) {
+        ABT_rwlock_unlock(provider->lock);
+        out.ret = SDSKV_ERR_UNKNOWN_DB;
+        return;
+    }
+    auto db = it->second;
+    ABT_rwlock_unlock(provider->lock);
 
     /* lock the provider */
     ABT_rwlock_rdlock(provider->lock);
@@ -2483,7 +2332,6 @@ static void sdskv_migrate_keys_prefixed_ult(hg_handle_t handle)
     GET_INPUT;
     ENSURE_MARGO_FREE_INPUT;
 
-    /* find the source database */
     ABT_rwlock_rdlock(provider->lock);
     auto it = provider->databases.find(in.source_db_id);
     if (it == provider->databases.end()) {
@@ -2491,7 +2339,7 @@ static void sdskv_migrate_keys_prefixed_ult(hg_handle_t handle)
         out.ret = SDSKV_ERR_UNKNOWN_DB;
         return;
     }
-    auto database = it->second;
+    auto db = it->second;
     ABT_rwlock_unlock(provider->lock);
 
     /* lookup the address of the target provider */
@@ -2520,7 +2368,7 @@ static void sdskv_migrate_keys_prefixed_ult(hg_handle_t handle)
                      in.key_prefix.data + in.key_prefix.size);
     do {
         try {
-            batch = database->list_keyvals(start_key, 64, prefix);
+            batch = db->list_keyvals(start_key, 64, prefix);
         } catch (int err) {
             out.ret = err;
             return;
@@ -2550,7 +2398,7 @@ static void sdskv_migrate_keys_prefixed_ult(hg_handle_t handle)
             }
             margo_free_output(put_handle, &out);
             /* remove the key if needed */
-            if (in.flag == SDSKV_REMOVE_ORIGINAL) { database->erase(kv.first); }
+            if (in.flag == SDSKV_REMOVE_ORIGINAL) { db->erase(kv.first); }
         }
         /* if original is removed, start_key can stay empty since we
            keep taking the beginning of the container, otherwise
@@ -2575,7 +2423,6 @@ static void sdskv_migrate_all_keys_ult(hg_handle_t handle)
     GET_INPUT;
     ENSURE_MARGO_FREE_INPUT;
 
-    /* find the source database */
     ABT_rwlock_rdlock(provider->lock);
     auto it = provider->databases.find(in.source_db_id);
     if (it == provider->databases.end()) {
@@ -2583,7 +2430,7 @@ static void sdskv_migrate_all_keys_ult(hg_handle_t handle)
         out.ret = SDSKV_ERR_UNKNOWN_DB;
         return;
     }
-    auto database = it->second;
+    auto db = it->second;
     ABT_rwlock_unlock(provider->lock);
 
     /* lookup the address of the target provider */
@@ -2610,7 +2457,7 @@ static void sdskv_migrate_all_keys_ult(hg_handle_t handle)
     ds_bulk_t                                    start_key;
     do {
         try {
-            batch = database->list_keyvals(start_key, 64);
+            batch = db->list_keyvals(start_key, 64);
         } catch (int err) {
             out.ret = err;
             return;
@@ -2640,7 +2487,7 @@ static void sdskv_migrate_all_keys_ult(hg_handle_t handle)
             }
             margo_free_output(put_handle, &out);
             /* remove the key if needed */
-            if (in.flag == SDSKV_REMOVE_ORIGINAL) { database->erase(kv.first); }
+            if (in.flag == SDSKV_REMOVE_ORIGINAL) { db->erase(kv.first); }
         }
         /* if original is removed, start_key can stay empty since we
            keep taking the beginning of the container, otherwise
@@ -2674,25 +2521,24 @@ static void sdskv_migrate_database_ult(hg_handle_t handle)
     GET_INPUT;
     ENSURE_MARGO_FREE_INPUT;
 
-#ifdef USE_REMI
-    if (provider->remi_client == NULL) {
-        out.ret = SDSKV_ERR_REMI;
-        return;
-    }
-
     ABT_rwlock_rdlock(provider->lock);
-    // find the database that needs to be migrated
     auto it = provider->databases.find(in.source_db_id);
     if (it == provider->databases.end()) {
         ABT_rwlock_unlock(provider->lock);
         out.ret = SDSKV_ERR_UNKNOWN_DB;
         return;
     }
-    auto database = it->second;
-    /* release the lock on the database */
+    auto db = it->second;
     ABT_rwlock_unlock(provider->lock);
+
+#ifdef USE_REMI
+    if (provider->remi_client == NULL) {
+        out.ret = SDSKV_ERR_REMI;
+        return;
+    }
+
     /* sync the database */
-    database->sync();
+    db->sync();
 
     /* lookup the address of the destination REMI provider */
     hret = margo_addr_lookup(mid, in.dest_remi_addr, &dest_addr);
@@ -2713,7 +2559,7 @@ static void sdskv_migrate_database_ult(hg_handle_t handle)
     DEFER(remi_provider_handle_release, remi_provider_handle_release(remi_ph));
 
     /* create a fileset */
-    local_fileset = database->create_and_populate_fileset();
+    local_fileset = db->create_and_populate_fileset();
     if (local_fileset == REMI_FILESET_NULL) {
         out.ret = SDSKV_OP_NOT_IMPL;
         return;
