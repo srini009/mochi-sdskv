@@ -598,8 +598,17 @@ extern "C" int sdskv_provider_add_comparison_function(sdskv_provider_t provider,
                                                       sdskv_compare_fn comp_fn)
 {
     if (provider->compfunctions.find(std::string(function_name))
-        != provider->compfunctions.end())
-        return SDSKV_ERR_COMP_FUNC;
+        != provider->compfunctions.end()) {
+        if (provider->compfunctions[std::string(function_name)] == comp_fn) {
+            return SDSKV_SUCCESS;
+        } else {
+            SDSKV_LOG_ERROR(provider->mid,
+                            "another comparison function with name \"%s\""
+                            " is already registered",
+                            function_name);
+            return SDSKV_ERR_COMP_FUNC;
+        }
+    }
     provider->compfunctions[std::string(function_name)] = comp_fn;
     return SDSKV_SUCCESS;
 }
@@ -618,13 +627,13 @@ extern "C" int sdskv_provider_find_comparison_function(
                         library);
         return SDSKV_ERR_COMP_FUNC;
     }
-    sdskv_compare_fn* comp_fn = (sdskv_compare_fn*)dlsym(handle, function_name);
+    sdskv_compare_fn comp_fn = (sdskv_compare_fn)dlsym(handle, function_name);
     if (comp_fn == NULL) {
         SDSKV_LOG_ERROR(provider->mid, "could not find comparator function %s",
                         function_name);
         return SDSKV_ERR_COMP_FUNC;
     }
-    provider->compfunctions[std::string(function_name)] = *comp_fn;
+    provider->compfunctions[std::string(function_name)] = comp_fn;
 
     return SDSKV_SUCCESS;
 }
@@ -754,8 +763,8 @@ extern "C" int sdskv_provider_compute_database_size(
     /* issue the migration */
     ret = remi_fileset_compute_size(fileset, 0, size);
     if (ret != REMI_SUCCESS) {
-        std::cerr << "[SDSKV] error: remi_fileset_compute_size returned " << ret
-                  << std::endl;
+        SDSKV_LOG_ERROR(provider->mid, "remi_fileset_compute_size returned %d",
+                        ret);
         return SDSKV_ERR_REMI;
     }
     return SDSKV_SUCCESS;
@@ -790,7 +799,6 @@ static void sdskv_open_ult(hg_handle_t handle)
 
     ENSURE_MARGO_DESTROY;
     ENSURE_MARGO_RESPOND;
-
     FIND_MID_AND_PROVIDER;
     GET_INPUT;
     ENSURE_MARGO_FREE_INPUT;
@@ -920,6 +928,7 @@ static void sdskv_put_multi_ult(hg_handle_t handle)
                              HG_BULK_WRITE_ONLY, &local_keys_bulk_handle);
     if (hret != HG_SUCCESS) {
         out.ret = SDSKV_MAKE_HG_ERROR(hret);
+        SDSKV_LOG_ERROR(mid, "failed to create bulk handle (hret = %d)", hret);
         return;
     }
     DEFER(margo_bulk_free_local_keys, margo_bulk_free(local_keys_bulk_handle));
@@ -929,6 +938,7 @@ static void sdskv_put_multi_ult(hg_handle_t handle)
                              HG_BULK_WRITE_ONLY, &local_vals_bulk_handle);
     if (hret != HG_SUCCESS) {
         out.ret = SDSKV_MAKE_HG_ERROR(hret);
+        SDSKV_LOG_ERROR(mid, "failed to create bulk handle (hret = %d)", hret);
         return;
     }
     DEFER(margo_bulk_free_local_vals, margo_bulk_free(local_vals_bulk_handle));
@@ -939,6 +949,7 @@ static void sdskv_put_multi_ult(hg_handle_t handle)
                                0, in.keys_bulk_size);
     if (hret != HG_SUCCESS) {
         out.ret = SDSKV_MAKE_HG_ERROR(hret);
+        SDSKV_LOG_ERROR(mid, "failed to issue bulk transfer (hret = %d)", hret);
         return;
     }
 
@@ -948,6 +959,7 @@ static void sdskv_put_multi_ult(hg_handle_t handle)
                                0, in.vals_bulk_size);
     if (hret != HG_SUCCESS) {
         out.ret = SDSKV_MAKE_HG_ERROR(hret);
+        SDSKV_LOG_ERROR(mid, "failed to issue bulk transfer (hret = %d)", hret);
         return;
     }
 
@@ -993,12 +1005,20 @@ static void sdskv_put_packed_ult(hg_handle_t handle)
     // find out the address of the origin
     if (in.origin_addr != NULL) {
         hret = margo_addr_lookup(mid, in.origin_addr, &origin_addr);
+        if (hret != HG_SUCCESS) {
+            SDSKV_LOG_ERROR(mid, "failed to lookup client address (hret = %d)",
+                            hret);
+            out.ret = SDSKV_MAKE_HG_ERROR(hret);
+            return;
+        }
     } else {
         hret = margo_addr_dup(mid, info->addr, &origin_addr);
-    }
-    if (hret != HG_SUCCESS) {
-        out.ret = SDSKV_MAKE_HG_ERROR(hret);
-        return;
+        if (hret != HG_SUCCESS) {
+            SDSKV_LOG_ERROR(
+                mid, "failed to duplicate client address (hret = %d)", hret);
+            out.ret = SDSKV_MAKE_HG_ERROR(hret);
+            return;
+        }
     }
     DEFER(margo_addr_free, margo_addr_free(mid, origin_addr));
 
@@ -1011,6 +1031,7 @@ static void sdskv_put_packed_ult(hg_handle_t handle)
     hret = margo_bulk_create(mid, 1, &buf_ptr, &buf_size, HG_BULK_WRITE_ONLY,
                              &local_bulk_handle);
     if (hret != HG_SUCCESS) {
+        SDSKV_LOG_ERROR(mid, "failed to create bulk handle (hret = %d)", hret);
         out.ret = SDSKV_MAKE_HG_ERROR(hret);
         return;
     }
@@ -1020,6 +1041,7 @@ static void sdskv_put_packed_ult(hg_handle_t handle)
     hret = margo_bulk_transfer(mid, HG_BULK_PULL, origin_addr, in.bulk_handle,
                                0, local_bulk_handle, 0, in.bulk_size);
     if (hret != HG_SUCCESS) {
+        SDSKV_LOG_ERROR(mid, "failed to issue bulk transfer (hret = %d)", hret);
         out.ret = SDSKV_MAKE_HG_ERROR(hret);
         return;
     }
@@ -1136,6 +1158,7 @@ static void sdskv_get_multi_ult(hg_handle_t handle)
     hret = margo_bulk_create(mid, 1, keys_addr.data(), &in.keys_bulk_size,
                              HG_BULK_WRITE_ONLY, &local_keys_bulk_handle);
     if (hret != HG_SUCCESS) {
+        SDSKV_LOG_ERROR(mid, "failed to create bulk handle (hret = %d)", hret);
         out.ret = SDSKV_MAKE_HG_ERROR(hret);
         return;
     }
@@ -1150,6 +1173,7 @@ static void sdskv_get_multi_ult(hg_handle_t handle)
     hret = margo_bulk_create(mid, 1, vals_addr.data(), &in.vals_bulk_size,
                              HG_BULK_READWRITE, &local_vals_bulk_handle);
     if (hret != HG_SUCCESS) {
+        SDSKV_LOG_ERROR(mid, "failed to create bulk handle (hret = %d)", hret);
         out.ret = SDSKV_MAKE_HG_ERROR(hret);
         return;
     }
@@ -1160,6 +1184,7 @@ static void sdskv_get_multi_ult(hg_handle_t handle)
                                in.keys_bulk_handle, 0, local_keys_bulk_handle,
                                0, in.keys_bulk_size);
     if (hret != HG_SUCCESS) {
+        SDSKV_LOG_ERROR(mid, "failed to issue bulk transfer (hret = %d)", hret);
         out.ret = SDSKV_MAKE_HG_ERROR(hret);
         return;
     }
@@ -1170,6 +1195,7 @@ static void sdskv_get_multi_ult(hg_handle_t handle)
                                in.vals_bulk_handle, 0, local_vals_bulk_handle,
                                0, in.num_keys * sizeof(hg_size_t));
     if (hret != HG_SUCCESS) {
+        SDSKV_LOG_ERROR(mid, "failed to issue bulk transfer (hret = %d)", hret);
         out.ret = SDSKV_MAKE_HG_ERROR(hret);
         return;
     }
@@ -1210,6 +1236,7 @@ static void sdskv_get_multi_ult(hg_handle_t handle)
                                in.vals_bulk_handle, 0, local_vals_bulk_handle,
                                0, in.vals_bulk_size);
     if (hret != HG_SUCCESS) {
+        SDSKV_LOG_ERROR(mid, "failed to issue bulk transfer (hret = %d)", hret);
         out.ret = SDSKV_MAKE_HG_ERROR(hret);
         return;
     }
@@ -1245,6 +1272,7 @@ static void sdskv_get_packed_ult(hg_handle_t handle)
     hret = margo_bulk_create(mid, 1, keys_addr.data(), &in.keys_bulk_size,
                              HG_BULK_WRITE_ONLY, &local_keys_bulk_handle);
     if (hret != HG_SUCCESS) {
+        SDSKV_LOG_ERROR(mid, "failed to create bulk handle (hret = %d)", hret);
         out.ret = SDSKV_MAKE_HG_ERROR(hret);
         return;
     }
@@ -1259,6 +1287,7 @@ static void sdskv_get_packed_ult(hg_handle_t handle)
     hret = margo_bulk_create(mid, 1, vals_addr.data(), &in.vals_bulk_size,
                              HG_BULK_READ_ONLY, &local_vals_bulk_handle);
     if (hret != HG_SUCCESS) {
+        SDSKV_LOG_ERROR(mid, "failed to create bulk handle (hret = %d)", hret);
         out.ret = SDSKV_MAKE_HG_ERROR(hret);
         return;
     }
@@ -1269,6 +1298,7 @@ static void sdskv_get_packed_ult(hg_handle_t handle)
                                in.keys_bulk_handle, 0, local_keys_bulk_handle,
                                0, in.keys_bulk_size);
     if (hret != HG_SUCCESS) {
+        SDSKV_LOG_ERROR(mid, "failed to issue bulk transfer (hret = %d)", hret);
         out.ret = SDSKV_MAKE_HG_ERROR(hret);
         return;
     }
@@ -1318,6 +1348,7 @@ static void sdskv_get_packed_ult(hg_handle_t handle)
                                in.vals_bulk_handle, 0, local_vals_bulk_handle,
                                0, in.vals_bulk_size);
     if (hret != HG_SUCCESS) {
+        SDSKV_LOG_ERROR(mid, "failed to issue bulk transfer (hret = %d)", hret);
         out.ret = SDSKV_MAKE_HG_ERROR(hret);
         return;
     }
@@ -1352,6 +1383,7 @@ static void sdskv_length_multi_ult(hg_handle_t handle)
     hret = margo_bulk_create(mid, 1, keys_addr.data(), &in.keys_bulk_size,
                              HG_BULK_WRITE_ONLY, &local_keys_bulk_handle);
     if (hret != HG_SUCCESS) {
+        SDSKV_LOG_ERROR(mid, "failed to create bulk handle (hret = %d)", hret);
         out.ret = SDSKV_MAKE_HG_ERROR(hret);
         return;
     }
@@ -1368,6 +1400,7 @@ static void sdskv_length_multi_ult(hg_handle_t handle)
                              &local_vals_size_buffer_size, HG_BULK_READ_ONLY,
                              &local_vals_size_bulk_handle);
     if (hret != HG_SUCCESS) {
+        SDSKV_LOG_ERROR(mid, "failed to create bulk handle (hret = %d)", hret);
         out.ret = SDSKV_MAKE_HG_ERROR(hret);
         return;
     }
@@ -1379,6 +1412,7 @@ static void sdskv_length_multi_ult(hg_handle_t handle)
                                in.keys_bulk_handle, 0, local_keys_bulk_handle,
                                0, in.keys_bulk_size);
     if (hret != HG_SUCCESS) {
+        SDSKV_LOG_ERROR(mid, "failed to issue bulk transfer (hret = %d)", hret);
         out.ret = SDSKV_MAKE_HG_ERROR(hret);
         return;
     }
@@ -1406,6 +1440,7 @@ static void sdskv_length_multi_ult(hg_handle_t handle)
         mid, HG_BULK_PUSH, info->addr, in.vals_size_bulk_handle, 0,
         local_vals_size_bulk_handle, 0, local_vals_size_buffer_size);
     if (hret != HG_SUCCESS) {
+        SDSKV_LOG_ERROR(mid, "failed to issue bulk transfer (hret = %d)", hret);
         out.ret = SDSKV_MAKE_HG_ERROR(hret);
         return;
     }
@@ -1440,6 +1475,7 @@ static void sdskv_exists_multi_ult(hg_handle_t handle)
     hret = margo_bulk_create(mid, 1, keys_addr.data(), &in.keys_bulk_size,
                              HG_BULK_WRITE_ONLY, &local_keys_bulk_handle);
     if (hret != HG_SUCCESS) {
+        SDSKV_LOG_ERROR(mid, "failed to create bulk handle (hret = %d)", hret);
         out.ret = SDSKV_MAKE_HG_ERROR(hret);
         return;
     }
@@ -1457,6 +1493,7 @@ static void sdskv_exists_multi_ult(hg_handle_t handle)
                              &local_flags_buffer_size, HG_BULK_READ_ONLY,
                              &local_flags_bulk_handle);
     if (hret != HG_SUCCESS) {
+        SDSKV_LOG_ERROR(mid, "failed to create bulk handle (hret = %d)", hret);
         out.ret = SDSKV_MAKE_HG_ERROR(hret);
         return;
     }
@@ -1468,6 +1505,7 @@ static void sdskv_exists_multi_ult(hg_handle_t handle)
                                in.keys_bulk_handle, 0, local_keys_bulk_handle,
                                0, in.keys_bulk_size);
     if (hret != HG_SUCCESS) {
+        SDSKV_LOG_ERROR(mid, "failed to issue bulk transfer (hret = %d)", hret);
         out.ret = SDSKV_MAKE_HG_ERROR(hret);
         return;
     }
@@ -1494,6 +1532,7 @@ static void sdskv_exists_multi_ult(hg_handle_t handle)
                                in.flags_bulk_handle, 0, local_flags_bulk_handle,
                                0, local_flags_buffer_size);
     if (hret != HG_SUCCESS) {
+        SDSKV_LOG_ERROR(mid, "failed to issue bulk transfer (hret = %d)", hret);
         out.ret = SDSKV_MAKE_HG_ERROR(hret);
         return;
     }
@@ -1528,6 +1567,7 @@ static void sdskv_length_packed_ult(hg_handle_t handle)
     hret = margo_bulk_create(mid, 1, keys_addr.data(), &in.in_bulk_size,
                              HG_BULK_WRITE_ONLY, &local_keys_bulk_handle);
     if (hret != HG_SUCCESS) {
+        SDSKV_LOG_ERROR(mid, "failed to create bulk handle (hret = %d)", hret);
         out.ret = SDSKV_MAKE_HG_ERROR(hret);
         return;
     }
@@ -1544,6 +1584,7 @@ static void sdskv_length_packed_ult(hg_handle_t handle)
                              &local_vals_size_buffer_size, HG_BULK_READ_ONLY,
                              &local_vals_size_bulk_handle);
     if (hret != HG_SUCCESS) {
+        SDSKV_LOG_ERROR(mid, "failed to create bulk handle (hret = %d)", hret);
         out.ret = SDSKV_MAKE_HG_ERROR(hret);
         return;
     }
@@ -1554,6 +1595,7 @@ static void sdskv_length_packed_ult(hg_handle_t handle)
     hret = margo_bulk_transfer(mid, HG_BULK_PULL, info->addr, in.in_bulk_handle,
                                0, local_keys_bulk_handle, 0, in.in_bulk_size);
     if (hret != HG_SUCCESS) {
+        SDSKV_LOG_ERROR(mid, "failed to issue bulk transfer (hret = %d)", hret);
         out.ret = SDSKV_MAKE_HG_ERROR(hret);
         return;
     }
@@ -1581,6 +1623,7 @@ static void sdskv_length_packed_ult(hg_handle_t handle)
         mid, HG_BULK_PUSH, info->addr, in.out_bulk_handle, 0,
         local_vals_size_bulk_handle, 0, local_vals_size_buffer_size);
     if (hret != HG_SUCCESS) {
+        SDSKV_LOG_ERROR(mid, "failed to issue bulk transfer (hret = %d)", hret);
         out.ret = SDSKV_MAKE_HG_ERROR(hret);
         return;
     }
@@ -1611,6 +1654,8 @@ static void sdskv_bulk_put_ult(hg_handle_t handle)
         hret             = margo_bulk_create(mid, 1, (void**)&buffer, &size,
                                  HG_BULK_WRITE_ONLY, &bulk_handle);
         if (hret != HG_SUCCESS) {
+            SDSKV_LOG_ERROR(mid, "failed to create bulk handle (hret = %d)",
+                            hret);
             out.ret = SDSKV_MAKE_HG_ERROR(hret);
             return;
         }
@@ -1619,6 +1664,8 @@ static void sdskv_bulk_put_ult(hg_handle_t handle)
         hret = margo_bulk_transfer(mid, HG_BULK_PULL, info->addr, in.handle, 0,
                                    bulk_handle, 0, vdata.size());
         if (hret != HG_SUCCESS) {
+            SDSKV_LOG_ERROR(mid, "failed to issue bulk transfer (hret = %d)",
+                            hret);
             out.ret = SDSKV_MAKE_HG_ERROR(hret);
             return;
         }
@@ -1637,6 +1684,8 @@ static void sdskv_bulk_get_ult(hg_handle_t handle)
     bulk_get_in_t  in;
     bulk_get_out_t out;
     hg_bulk_t      bulk_handle;
+
+    memset(&out, 0, sizeof(out));
 
     ENSURE_MARGO_DESTROY;
     ENSURE_MARGO_RESPOND;
@@ -1668,6 +1717,8 @@ static void sdskv_bulk_get_ult(hg_handle_t handle)
         hret = margo_bulk_create(mid, 1, (void**)&buffer, &size,
                                  HG_BULK_READ_ONLY, &bulk_handle);
         if (hret != HG_SUCCESS) {
+            SDSKV_LOG_ERROR(mid, "failed to create bulk handle (hret = %d)",
+                            hret);
             out.vsize = 0;
             out.ret   = SDSKV_MAKE_HG_ERROR(hret);
             return;
@@ -1677,6 +1728,8 @@ static void sdskv_bulk_get_ult(hg_handle_t handle)
         hret = margo_bulk_transfer(mid, HG_BULK_PUSH, info->addr, in.handle, 0,
                                    bulk_handle, 0, vdata.size());
         if (hret != HG_SUCCESS) {
+            SDSKV_LOG_ERROR(mid, "failed to issue bulk transfer (hret = %d)",
+                            hret);
             out.vsize = 0;
             out.ret   = SDSKV_MAKE_HG_ERROR(hret);
             return;
@@ -1738,6 +1791,7 @@ static void sdskv_erase_multi_ult(hg_handle_t handle)
     hret = margo_bulk_create(mid, 1, keys_addr.data(), &in.keys_bulk_size,
                              HG_BULK_WRITE_ONLY, &local_keys_bulk_handle);
     if (hret != HG_SUCCESS) {
+        SDSKV_LOG_ERROR(mid, "failed to create bulk handle (hret = %d)", hret);
         out.ret = SDSKV_MAKE_HG_ERROR(hret);
         return;
     }
@@ -1748,6 +1802,7 @@ static void sdskv_erase_multi_ult(hg_handle_t handle)
                                in.keys_bulk_handle, 0, local_keys_bulk_handle,
                                0, in.keys_bulk_size);
     if (hret != HG_SUCCESS) {
+        SDSKV_LOG_ERROR(mid, "failed to issue bulk transfer (hret = %d)", hret);
         out.ret = SDSKV_MAKE_HG_ERROR(hret);
         return;
     }
@@ -1815,7 +1870,7 @@ static void sdskv_list_keys_ult(hg_handle_t handle)
     hret = margo_bulk_create(mid, 1, ksizes_addr.data(), &ksizes_bulk_size,
                              HG_BULK_READWRITE, &ksizes_local_bulk);
     if (hret != HG_SUCCESS) {
-        SDSKV_LOG_ERROR(mid, "could not create bulk handle");
+        SDSKV_LOG_ERROR(mid, "failed to create bulk handle (hret = %d)", hret);
         out.ret = SDSKV_MAKE_HG_ERROR(hret);
         return;
     }
@@ -1827,7 +1882,7 @@ static void sdskv_list_keys_ult(hg_handle_t handle)
                                in.ksizes_bulk_handle, 0, ksizes_local_bulk, 0,
                                ksizes_bulk_size);
     if (hret != HG_SUCCESS) {
-        SDSKV_LOG_ERROR(mid, "could not issue bulk transfer");
+        SDSKV_LOG_ERROR(mid, "failed to issue bulk transfer (hret = %d)", hret);
         out.ret = SDSKV_MAKE_HG_ERROR(hret);
         return;
     }
@@ -1868,7 +1923,7 @@ static void sdskv_list_keys_ult(hg_handle_t handle)
                                in.ksizes_bulk_handle, 0, ksizes_local_bulk, 0,
                                ksizes_bulk_size);
     if (hret != HG_SUCCESS) {
-        SDSKV_LOG_ERROR(mid, "could not issue bulk transfer");
+        SDSKV_LOG_ERROR(mid, "failed to issue bulk transfer (hret = %d)", hret);
         out.ret = SDSKV_MAKE_HG_ERROR(hret);
         return;
     }
@@ -1891,7 +1946,7 @@ static void sdskv_list_keys_ult(hg_handle_t handle)
         = margo_bulk_create(mid, num_keys, keys_addr.data(), true_ksizes.data(),
                             HG_BULK_READ_ONLY, &keys_local_bulk);
     if (hret != HG_SUCCESS) {
-        SDSKV_LOG_ERROR(mid, "could not create bulk handle");
+        SDSKV_LOG_ERROR(mid, "failed to create bulk handle (hret = %d)", hret);
         out.ret = SDSKV_MAKE_HG_ERROR(hret);
         return;
     }
@@ -1907,7 +1962,8 @@ static void sdskv_list_keys_ult(hg_handle_t handle)
                 mid, HG_BULK_PUSH, origin_addr, in.keys_bulk_handle,
                 remote_offset, keys_local_bulk, local_offset, true_ksizes[i]);
             if (hret != HG_SUCCESS) {
-                SDSKV_LOG_ERROR(mid, "could not issue bulk transfer");
+                SDSKV_LOG_ERROR(
+                    mid, "failed to issue bulk transfer (hret = %d)", hret);
                 out.ret = SDSKV_MAKE_HG_ERROR(hret);
                 return;
             }
@@ -1950,7 +2006,7 @@ static void sdskv_list_keyvals_ult(hg_handle_t handle)
     hret = margo_bulk_create(mid, 1, ksizes_addr.data(), &ksizes_bulk_size,
                              HG_BULK_READWRITE, &ksizes_local_bulk);
     if (hret != HG_SUCCESS) {
-        SDSKV_LOG_ERROR(mid, "could not create bulk");
+        SDSKV_LOG_ERROR(mid, "failed to create bulk handle (hret = %d)", hret);
         out.ret = SDSKV_MAKE_HG_ERROR(hret);
         return;
     }
@@ -1964,7 +2020,7 @@ static void sdskv_list_keyvals_ult(hg_handle_t handle)
     hret = margo_bulk_create(mid, 1, vsizes_addr.data(), &vsizes_bulk_size,
                              HG_BULK_READWRITE, &vsizes_local_bulk);
     if (hret != HG_SUCCESS) {
-        SDSKV_LOG_ERROR(mid, "could not create bulk");
+        SDSKV_LOG_ERROR(mid, "failed to create bulk handle (hret = %d)", hret);
         out.ret = SDSKV_MAKE_HG_ERROR(hret);
         return;
     }
@@ -1976,7 +2032,7 @@ static void sdskv_list_keyvals_ult(hg_handle_t handle)
                                in.ksizes_bulk_handle, 0, ksizes_local_bulk, 0,
                                ksizes_bulk_size);
     if (hret != HG_SUCCESS) {
-        SDSKV_LOG_ERROR(mid, "could not issue bulk transfer");
+        SDSKV_LOG_ERROR(mid, "failed to issue bulk transfer (hret = %d)", hret);
         out.ret = SDSKV_MAKE_HG_ERROR(hret);
         return;
     }
@@ -1986,7 +2042,7 @@ static void sdskv_list_keyvals_ult(hg_handle_t handle)
                                in.vsizes_bulk_handle, 0, vsizes_local_bulk, 0,
                                vsizes_bulk_size);
     if (hret != HG_SUCCESS) {
-        SDSKV_LOG_ERROR(mid, "could not issue bulk transfer");
+        SDSKV_LOG_ERROR(mid, "failed to issue bulk transfer (hret = %d)", hret);
         out.ret = SDSKV_MAKE_HG_ERROR(hret);
         return;
     }
@@ -2046,7 +2102,8 @@ static void sdskv_list_keyvals_ult(hg_handle_t handle)
                                    in.ksizes_bulk_handle, 0, ksizes_local_bulk,
                                    0, ksizes_bulk_size);
         if (hret != HG_SUCCESS) {
-            SDSKV_LOG_ERROR(mid, "could not issue bulk transfer");
+            SDSKV_LOG_ERROR(mid, "failed to issue bulk transfer (hret = %d)",
+                            hret);
             out.ret = SDSKV_MAKE_HG_ERROR(hret);
             return;
         }
@@ -2058,7 +2115,8 @@ static void sdskv_list_keyvals_ult(hg_handle_t handle)
                                    in.vsizes_bulk_handle, 0, vsizes_local_bulk,
                                    0, vsizes_bulk_size);
         if (hret != HG_SUCCESS) {
-            SDSKV_LOG_ERROR(mid, "could not issue bulk transfer");
+            SDSKV_LOG_ERROR(mid, "failed to issue bulk transfer (hret = %d)",
+                            hret);
             out.ret = SDSKV_MAKE_HG_ERROR(hret);
             return;
         }
@@ -2110,7 +2168,8 @@ static void sdskv_list_keyvals_ult(hg_handle_t handle)
                 mid, HG_BULK_PUSH, origin_addr, in.keys_bulk_handle,
                 remote_offset, keys_local_bulk, local_offset, true_ksizes[i]);
             if (hret != HG_SUCCESS) {
-                SDSKV_LOG_ERROR(mid, "could not issue bulk transfer");
+                SDSKV_LOG_ERROR(
+                    mid, "failed to issue bulk transfer (hret = %d)", hret);
                 out.ret = SDSKV_MAKE_HG_ERROR(hret);
                 return;
             }
@@ -2129,7 +2188,8 @@ static void sdskv_list_keyvals_ult(hg_handle_t handle)
                 mid, HG_BULK_PUSH, origin_addr, in.vals_bulk_handle,
                 remote_offset, vals_local_bulk, local_offset, true_vsizes[i]);
             if (hret != HG_SUCCESS) {
-                SDSKV_LOG_ERROR(mid, "could not issue bulk transfer");
+                SDSKV_LOG_ERROR(
+                    mid, "failed to issue bulk transfer (hret = %d)", hret);
                 out.ret = SDSKV_MAKE_HG_ERROR(hret);
                 return;
             }
@@ -2159,6 +2219,8 @@ static void sdskv_migrate_keys_ult(hg_handle_t handle)
     auto it = provider->databases.find(in.source_db_id);
     if (it == provider->databases.end()) {
         ABT_rwlock_unlock(provider->lock);
+        SDSKV_LOG_ERROR(mid, "couldn't find target database with id %lu",
+                        in.source_db_id);
         out.ret = SDSKV_ERR_UNKNOWN_DB;
         return;
     }
@@ -2169,6 +2231,8 @@ static void sdskv_migrate_keys_ult(hg_handle_t handle)
     hg_addr_t target_addr = HG_ADDR_NULL;
     hret = margo_addr_lookup(mid, in.target_addr, &target_addr);
     if (hret != HG_SUCCESS) {
+        SDSKV_LOG_ERROR(mid, "failed to lookup target address (hret = %d)",
+                        hret);
         out.ret = SDSKV_MAKE_HG_ERROR(hret);
         return;
     }
@@ -2182,6 +2246,7 @@ static void sdskv_migrate_keys_ult(hg_handle_t handle)
     hret = margo_bulk_create(mid, 1, (void**)&buffer, &bulk_size,
                              HG_BULK_WRITE_ONLY, &bulk_handle);
     if (hret != HG_SUCCESS) {
+        SDSKV_LOG_ERROR(mid, "failed to create bulk handle (hret = %d)", hret);
         out.ret = SDSKV_MAKE_HG_ERROR(hret);
         return;
     }
@@ -2191,6 +2256,7 @@ static void sdskv_migrate_keys_ult(hg_handle_t handle)
     hret = margo_bulk_transfer(mid, HG_BULK_PULL, info->addr, in.keys_bulk, 0,
                                bulk_handle, 0, in.bulk_size);
     if (hret != HG_SUCCESS) {
+        SDSKV_LOG_ERROR(mid, "failed to issue bulk transfer (hret = %d)", hret);
         out.ret = SDSKV_MAKE_HG_ERROR(hret);
         return;
     }
@@ -2203,6 +2269,8 @@ static void sdskv_migrate_keys_ult(hg_handle_t handle)
     hg_handle_t put_handle;
     hret = margo_create(mid, target_addr, provider->sdskv_put_id, &put_handle);
     if (hret != HG_SUCCESS) {
+        SDSKV_LOG_ERROR(mid, "failed to create \"put\" RPC handle (hret = %d)",
+                        hret);
         out.ret = SDSKV_MAKE_HG_ERROR(hret);
         return;
     }
@@ -2233,12 +2301,18 @@ static void sdskv_migrate_keys_ult(hg_handle_t handle)
         hret = margo_provider_forward(in.target_provider_id, put_handle,
                                       &put_in);
         if (hret != HG_SUCCESS) {
+            SDSKV_LOG_ERROR(mid, "failed to forward \"put\" RPC (hret = %d)",
+                            hret);
             out.ret = SDSKV_ERR_MIGRATION;
             return;
         }
         /* get output of the put call */
         hret = margo_get_output(put_handle, &put_out);
         if (hret != HG_SUCCESS || put_out.ret != SDSKV_SUCCESS) {
+            SDSKV_LOG_ERROR(mid,
+                            "put RPC yielded incorrect output (hret = %d, "
+                            "put_out.ret = %d)",
+                            hret, put_out.ret);
             out.ret = SDSKV_ERR_MIGRATION;
             return;
         }
@@ -2265,6 +2339,8 @@ static void sdskv_migrate_key_range_ult(hg_handle_t handle)
     auto it = provider->databases.find(in.source_db_id);
     if (it == provider->databases.end()) {
         ABT_rwlock_unlock(provider->lock);
+        SDSKV_LOG_ERROR(mid, "couldn't find target database with id %lu",
+                        in.source_db_id);
         out.ret = SDSKV_ERR_UNKNOWN_DB;
         return;
     }
@@ -2296,6 +2372,8 @@ static void sdskv_migrate_keys_prefixed_ult(hg_handle_t handle)
     auto it = provider->databases.find(in.source_db_id);
     if (it == provider->databases.end()) {
         ABT_rwlock_unlock(provider->lock);
+        SDSKV_LOG_ERROR(mid, "couldn't find target database with id %lu",
+                        in.source_db_id);
         out.ret = SDSKV_ERR_UNKNOWN_DB;
         return;
     }
@@ -2306,6 +2384,8 @@ static void sdskv_migrate_keys_prefixed_ult(hg_handle_t handle)
     hg_addr_t target_addr = HG_ADDR_NULL;
     hret = margo_addr_lookup(mid, in.target_addr, &target_addr);
     if (hret != HG_SUCCESS) {
+        SDSKV_LOG_ERROR(mid, "failed to lookup target address (hret = %d)",
+                        hret);
         out.ret = SDSKV_MAKE_HG_ERROR(hret);
         return;
     }
@@ -2315,6 +2395,8 @@ static void sdskv_migrate_keys_prefixed_ult(hg_handle_t handle)
     hg_handle_t put_handle;
     hret = margo_create(mid, target_addr, provider->sdskv_put_id, &put_handle);
     if (hret != HG_SUCCESS) {
+        SDSKV_LOG_ERROR(mid, "failed to create \"put\" RPC handle (hret = %d)",
+                        hret);
         out.ret = SDSKV_MAKE_HG_ERROR(hret);
         return;
     }
@@ -2347,12 +2429,16 @@ static void sdskv_migrate_keys_prefixed_ult(hg_handle_t handle)
             hret = margo_provider_forward(in.target_provider_id, put_handle,
                                           &put_in);
             if (hret != HG_SUCCESS) {
+                SDSKV_LOG_ERROR(
+                    mid, "failed to forward \"put\" RPC (hret = %d)", hret);
                 out.ret = SDSKV_ERR_MIGRATION;
                 return;
             }
             /* get output of the put call */
             hret = margo_get_output(put_handle, &put_out);
             if (hret != HG_SUCCESS || put_out.ret != SDSKV_SUCCESS) {
+                SDSKV_LOG_ERROR(mid, "\"put\" RPC failed (hret = %d, ret = %d)",
+                                hret, put_out.ret);
                 out.ret = SDSKV_ERR_MIGRATION;
                 return;
             }
@@ -2387,6 +2473,8 @@ static void sdskv_migrate_all_keys_ult(hg_handle_t handle)
     auto it = provider->databases.find(in.source_db_id);
     if (it == provider->databases.end()) {
         ABT_rwlock_unlock(provider->lock);
+        SDSKV_LOG_ERROR(mid, "couldn't find target database with id %lu",
+                        in.source_db_id);
         out.ret = SDSKV_ERR_UNKNOWN_DB;
         return;
     }
@@ -2397,6 +2485,8 @@ static void sdskv_migrate_all_keys_ult(hg_handle_t handle)
     hg_addr_t target_addr = HG_ADDR_NULL;
     hret = margo_addr_lookup(mid, in.target_addr, &target_addr);
     if (hret != HG_SUCCESS) {
+        SDSKV_LOG_ERROR(mid, "failed to lookup target address (hret = %d)",
+                        hret);
         out.ret = SDSKV_MAKE_HG_ERROR(hret);
         return;
     }
@@ -2406,6 +2496,8 @@ static void sdskv_migrate_all_keys_ult(hg_handle_t handle)
     hg_handle_t put_handle;
     hret = margo_create(mid, target_addr, provider->sdskv_put_id, &put_handle);
     if (hret != HG_SUCCESS) {
+        SDSKV_LOG_ERROR(mid, "failed to create \"put\" RPC handle (hret = %d)",
+                        hret);
         out.ret = SDSKV_MAKE_HG_ERROR(hret);
         return;
     }
@@ -2419,6 +2511,7 @@ static void sdskv_migrate_all_keys_ult(hg_handle_t handle)
         try {
             batch = db->list_keyvals(start_key, 64);
         } catch (int err) {
+            SDSKV_LOG_ERROR(mid, "list_keyvals failed (err = %d)", err);
             out.ret = err;
             return;
         }
@@ -2436,12 +2529,16 @@ static void sdskv_migrate_all_keys_ult(hg_handle_t handle)
             hret = margo_provider_forward(in.target_provider_id, put_handle,
                                           &put_in);
             if (hret != HG_SUCCESS) {
+                SDSKV_LOG_ERROR(
+                    mid, "failed to forward \"put\" RPC (hret = %d)", hret);
                 out.ret = SDSKV_ERR_MIGRATION;
                 return;
             }
             /* get output of the put call */
             hret = margo_get_output(put_handle, &put_out);
             if (hret != HG_SUCCESS || put_out.ret != SDSKV_SUCCESS) {
+                SDSKV_LOG_ERROR(mid, "\"put\" RPC failed (hret = %d, ret = %d)",
+                                hret, put_out.ret);
                 out.ret = SDSKV_ERR_MIGRATION;
                 return;
             }
@@ -2485,6 +2582,8 @@ static void sdskv_migrate_database_ult(hg_handle_t handle)
     auto it = provider->databases.find(in.source_db_id);
     if (it == provider->databases.end()) {
         ABT_rwlock_unlock(provider->lock);
+        SDSKV_LOG_ERROR(mid, "couldn't find target database with id %lu",
+                        in.source_db_id);
         out.ret = SDSKV_ERR_UNKNOWN_DB;
         return;
     }
@@ -2503,6 +2602,8 @@ static void sdskv_migrate_database_ult(hg_handle_t handle)
     /* lookup the address of the destination REMI provider */
     hret = margo_addr_lookup(mid, in.dest_remi_addr, &dest_addr);
     if (hret != HG_SUCCESS) {
+        SDSKV_LOG_ERROR(mid, "failed to lookup target address (hret = %d)",
+                        hret);
         out.ret = SDSKV_MAKE_HG_ERROR(hret);
         return;
     }
@@ -2512,6 +2613,8 @@ static void sdskv_migrate_database_ult(hg_handle_t handle)
     ret = remi_provider_handle_create(provider->remi_client, dest_addr,
                                       in.dest_remi_provider_id, &remi_ph);
     if (ret != REMI_SUCCESS) {
+        SDSKV_LOG_ERROR(mid, "failed to create REMI provider handle (ret = %d)",
+                        ret);
         out.ret      = SDSKV_ERR_REMI;
         out.remi_ret = ret;
         return;
@@ -2521,6 +2624,7 @@ static void sdskv_migrate_database_ult(hg_handle_t handle)
     /* create a fileset */
     local_fileset = db->create_and_populate_fileset();
     if (local_fileset == REMI_FILESET_NULL) {
+        SDSKV_LOG_ERROR(mid, "failed to create and populate REMI fileset");
         out.ret = SDSKV_OP_NOT_IMPL;
         return;
     }
@@ -2534,8 +2638,10 @@ static void sdskv_migrate_database_ult(hg_handle_t handle)
         out.remi_ret = ret;
         if (ret == REMI_ERR_USER)
             out.ret = status;
-        else
+        else {
             out.ret = SDSKV_ERR_REMI;
+        }
+        SDSKV_LOG_ERROR(mid, "failed to migrate REMI fileset (ret = %d)", ret);
         return;
     }
 
