@@ -23,6 +23,7 @@ struct options {
     sdskv_db_type_t* db_types;
     char*            host_file;
     kv_mplex_mode_t  mplex_mode;
+    margo_log_level  log_level;
 };
 
 static void usage(int argc, char** argv)
@@ -37,6 +38,9 @@ static void usage(int argc, char** argv)
     fprintf(stderr,
             "       [-m mode] multiplexing mode (providers or databases) for "
             "managing multiple databases (default is databases)\n");
+    fprintf(stderr,
+            "       [-v level] logging level (trace, debug, info, warning, "
+            "error, critical)\n");
     fprintf(
         stderr,
         "Example: ./sdskv-server-daemon tcp://localhost:1234 foo:bdb bar\n");
@@ -64,6 +68,18 @@ static sdskv_db_type_t parse_db_type(char* db_fullname)
     exit(-1);
 }
 
+static margo_log_level parse_log_level(const char* log_level)
+{
+    if (strcmp(log_level, "trace") == 0) return MARGO_LOG_TRACE;
+    if (strcmp(log_level, "debug") == 0) return MARGO_LOG_DEBUG;
+    if (strcmp(log_level, "info") == 0) return MARGO_LOG_INFO;
+    if (strcmp(log_level, "warning") == 0) return MARGO_LOG_WARNING;
+    if (strcmp(log_level, "error") == 0) return MARGO_LOG_ERROR;
+    if (strcmp(log_level, "critical") == 0) return MARGO_LOG_CRITICAL;
+    fprintf(stderr, "Unknown logging level \"%s\"", log_level);
+    exit(-1);
+}
+
 static void parse_args(int argc, char** argv, struct options* opts)
 {
     int opt;
@@ -71,7 +87,7 @@ static void parse_args(int argc, char** argv, struct options* opts)
     memset(opts, 0, sizeof(*opts));
 
     /* get options */
-    while ((opt = getopt(argc, argv, "f:m:")) != -1) {
+    while ((opt = getopt(argc, argv, "f:m:v:")) != -1) {
         switch (opt) {
         case 'f':
             opts->host_file = optarg;
@@ -86,6 +102,9 @@ static void parse_args(int argc, char** argv, struct options* opts)
                         optarg);
                 exit(EXIT_FAILURE);
             }
+            break;
+        case 'v':
+            opts->log_level = parse_log_level(optarg);
             break;
         default:
             usage(argc, argv);
@@ -117,7 +136,11 @@ int main(int argc, char** argv)
     margo_instance_id mid;
     int               ret;
 
+    opts.log_level = MARGO_LOG_INFO;
+
     parse_args(argc, argv, &opts);
+
+    margo_set_global_log_level(opts.log_level);
 
     /* start margo */
     /* use the main xstream for driving progress and executing rpc handlers */
