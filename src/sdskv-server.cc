@@ -48,7 +48,7 @@ template <typename F> inline scoped_call<F> at_exit(F&& f)
     DEFER(margo_free_input, margo_free_input(handle, &in))
 
 #define SDSKV_LOG_ERROR(__mid__, __msg__, ...) \
-    margo_error(__mid__, "%s:%s: " __msg__, __func__, __LINE__, ##__VA_ARGS__)
+    margo_error(__mid__, "%s:%d: " __msg__, __func__, __LINE__, ##__VA_ARGS__)
 
 #define FIND_MID_AND_PROVIDER                                              \
     margo_instance_id     mid;                                             \
