@@ -25,6 +25,9 @@
             "provider_id" : 1,
             "pool" : "__primary__",
             "config" : {
+                "databases" : [
+                    { "name" : "mydb", "type" : "map", "no_overwrite" : true }
+                ]
             },
             "dependencies" : {
                 "remi_provider" : "my_remi_provider",

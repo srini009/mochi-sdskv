@@ -2814,9 +2814,124 @@ static int sdskv_post_migration_callback(remi_fileset_t fileset, void* uargs)
 
 #endif
 
+static int check_provider_config(sdskv_provider_t provider)
+{
+    auto& cfg = provider->json_cfg;
+    // null is ok
+    if (cfg.isNull()) return SDSKV_SUCCESS;
+    // otherwise config must be an object
+    if (!cfg.isObject()) {
+        SDSKV_LOG_ERROR(provider->mid, "config is not an object");
+        return SDSKV_ERR_CONFIG;
+    }
+    // check comparators
+    if (cfg.isMember("comparators")) {
+        auto& comparators = cfg["comparators"];
+        // comparators must be an array
+        if (!comparators.isArray()) {
+            SDSKV_LOG_ERROR(provider->mid,
+                            "comparators field must be an array");
+            return SDSKV_ERR_CONFIG;
+        }
+        // each element must be an object with "name" and "library" string
+        // fields
+        for (auto it = comparators.begin(); it != comparators.end(); it++) {
+            if (!it->isObject()) {
+                SDSKV_LOG_ERROR(provider->mid,
+                                "comparator entry should be an object");
+                return SDSKV_ERR_CONFIG;
+            }
+            if (!it->isMember("name")) {
+                SDSKV_LOG_ERROR(provider->mid, "comparator should have a name");
+                return SDSKV_ERR_CONFIG;
+            }
+            if (!(*it)["name"].isString()) {
+                SDSKV_LOG_ERROR(provider->mid,
+                                "comparator name should be a string");
+                return SDSKV_ERR_CONFIG;
+            }
+            if (!it->isMember("library")) {
+                // the string field is optional
+                (*it)["library"] = "";
+            }
+            if (!(*it)["library"].isString()) {
+                SDSKV_LOG_ERROR(provider->mid,
+                                "comparator library should be a string");
+                return SDSKV_ERR_CONFIG;
+            }
+        }
+    }
+    // check databases
+    if (cfg.isMember("databases")) {
+        auto& databases = cfg["databases"];
+        // databases must be an array
+        if (!databases.isArray()) {
+            SDSKV_LOG_ERROR(provider->mid, "databases field must be an array");
+            return SDSKV_ERR_CONFIG;
+        }
+        // check each database
+        for (auto it = databases.begin(); it != databases.end(); it++) {
+            if (!it->isObject()) {
+                SDSKV_LOG_ERROR(provider->mid,
+                                "database entry should be an object");
+                return SDSKV_ERR_CONFIG;
+            }
+            // check name field
+            if (!it->isMember("name")) {
+                SDSKV_LOG_ERROR(provider->mid, "database should have a name");
+                return SDSKV_ERR_CONFIG;
+            }
+            if (!(*it)["name"].isString()) {
+                SDSKV_LOG_ERROR(provider->mid,
+                                "database name should be a string");
+                return SDSKV_ERR_CONFIG;
+            }
+            // check type field
+            if (!it->isMember("type")) {
+                SDSKV_LOG_ERROR(provider->mid, "database should have a type");
+                return SDSKV_ERR_CONFIG;
+            }
+            if (!(*it)["type"].isString()) {
+                SDSKV_LOG_ERROR(provider->mid,
+                                "database type should be a string");
+                return SDSKV_ERR_CONFIG;
+            }
+            // check path
+            if (!it->isMember("path")) { (*it)["path"] = ""; }
+            if (!(*it)["path"].isString()) {
+                SDSKV_LOG_ERROR(provider->mid,
+                                "database path should be a string");
+                return SDSKV_ERR_CONFIG;
+            }
+            // check no_overwrite
+            if (!it->isMember("no_overwrite")) {
+                (*it)["no_overwrite"] = false;
+            }
+            if (!(*it)["no_overwrite"].isBool()) {
+                SDSKV_LOG_ERROR(
+                    provider->mid,
+                    "database no_overwrite field should be a boolean");
+                return SDSKV_ERR_CONFIG;
+            }
+            // check comparator
+            if (!it->isMember("comparator")) { (*it)["comparator"] = ""; }
+            if (!(*it)["comparator"].isString()) {
+                SDSKV_LOG_ERROR(provider->mid,
+                                "database comparator should be a string");
+                return SDSKV_ERR_CONFIG;
+            }
+        }
+    }
+    return SDSKV_SUCCESS;
+}
+
 static int populate_provider_from_config(sdskv_provider_t provider)
 {
-    int   ret         = SDSKV_SUCCESS;
+    int ret = SDSKV_SUCCESS;
+
+    ret = check_provider_config(provider);
+    if (ret != SDSKV_SUCCESS) return ret;
+
     auto& comparators = provider->json_cfg["comparators"];
     for (auto it = comparators.begin(); it != comparators.end(); it++) {
         ret = sdskv_provider_find_comparison_function(
