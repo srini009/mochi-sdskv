@@ -117,6 +117,19 @@ class MapDataStore : public AbstractDataStore {
         return get(key, values[0]);
     }
 
+    virtual bool length(const ds_bulk_t& key, size_t* vsize) override
+    {
+        ABT_rwlock_rdlock(_map_lock);
+        auto it = _map.find(key);
+        if (it == _map.end()) {
+            ABT_rwlock_unlock(_map_lock);
+            return false;
+        }
+        *vsize = it->second.size();
+        ABT_rwlock_unlock(_map_lock);
+        return true;
+    }
+
     virtual bool exists(const ds_bulk_t& key) const override
     {
         ABT_rwlock_rdlock(_map_lock);

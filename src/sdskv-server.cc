@@ -1079,9 +1079,9 @@ static void sdskv_length_ult(hg_handle_t handle)
 
     ds_bulk_t kdata(in.key.data, in.key.data + in.key.size);
 
-    ds_bulk_t vdata;
-    if (db->get(kdata, vdata)) {
-        out.size = vdata.size();
+    size_t vsize;
+    if (db->length(kdata, &vsize)) {
+        out.size = vsize;
         out.ret  = SDSKV_SUCCESS;
     } else {
         out.size = 0;
@@ -1426,9 +1426,9 @@ static void sdskv_length_multi_ult(hg_handle_t handle)
     /* go through the key/value pairs and get the values from the database */
     for (unsigned i = 0; i < in.num_keys; i++) {
         ds_bulk_t kdata(packed_keys, packed_keys + key_sizes[i]);
-        ds_bulk_t vdata;
-        if (db->get(kdata, vdata)) {
-            local_vals_size_buffer[i] = vdata.size();
+        size_t    vsize;
+        if (db->length(kdata, &vsize)) {
+            local_vals_size_buffer[i] = vsize;
         } else {
             local_vals_size_buffer[i] = 0;
         }
@@ -1519,9 +1519,11 @@ static void sdskv_exists_multi_ult(hg_handle_t handle)
     /* go through the key/value pairs and get the values from the database */
     uint8_t mask = 1;
     for (unsigned i = 0; i < in.num_keys; i++) {
-        ds_bulk_t kdata(packed_keys, packed_keys + key_sizes[i]);
-        ds_bulk_t vdata;
-        if (db->get(kdata, vdata)) { local_flags_buffer[i / 8] |= mask; }
+        auto current_key   = packed_keys;
+        auto current_ksize = key_sizes[i];
+        if (db->exists(current_key, current_ksize)) {
+            local_flags_buffer[i / 8] |= mask;
+        }
         mask = mask << 1;
         if (i % 8 == 7) mask = 1;
         packed_keys += key_sizes[i];
@@ -1609,9 +1611,9 @@ static void sdskv_length_packed_ult(hg_handle_t handle)
     /* go through the key/value pairs and get the values from the database */
     for (unsigned i = 0; i < in.num_keys; i++) {
         ds_bulk_t kdata(packed_keys, packed_keys + key_sizes[i]);
-        ds_bulk_t vdata;
-        if (db->get(kdata, vdata)) {
-            local_vals_size_buffer[i] = vdata.size();
+        size_t    vsize;
+        if (db->length(kdata, &vsize)) {
+            local_vals_size_buffer[i] = vsize;
         } else {
             local_vals_size_buffer[i] = 0;
         }
@@ -1836,9 +1838,7 @@ static void sdskv_exists_ult(hg_handle_t handle)
     ENSURE_MARGO_FREE_INPUT;
     FIND_DATABASE;
 
-    ds_bulk_t kdata(in.key.data, in.key.data + in.key.size);
-
-    out.flag = db->exists(kdata) ? 1 : 0;
+    out.flag = db->exists(in.key.data, in.key.size) ? 1 : 0;
     out.ret  = SDSKV_SUCCESS;
 }
 DEFINE_MARGO_RPC_HANDLER(sdskv_exists_ult)

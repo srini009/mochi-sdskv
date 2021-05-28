@@ -69,7 +69,19 @@ class AbstractDataStore {
     }
     virtual bool get(const ds_bulk_t& key, ds_bulk_t& data)              = 0;
     virtual bool get(const ds_bulk_t& key, std::vector<ds_bulk_t>& data) = 0;
-    virtual bool exists(const void* key, hg_size_t ksize) const          = 0;
+    virtual bool length(const void* key, hg_size_t ksize, size_t* vsize)
+    {
+        auto k = ds_bulk_t((const char*)key, (const char*)key + ksize);
+        return length(k, vsize);
+    }
+    virtual bool length(const ds_bulk_t& key, size_t* size)
+    {
+        ds_bulk_t data;
+        auto      ret = get(key, data);
+        if (ret) *size = data.size();
+        return ret;
+    }
+    virtual bool exists(const void* key, hg_size_t ksize) const = 0;
     virtual bool exists(const ds_bulk_t& key) const
     {
         return exists(key.data(), key.size());
