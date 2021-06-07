@@ -53,8 +53,10 @@ endif
 #		   lib/libsdskv-client.la \
 #		   lib/libsdskv-server.la
 lib_LTLIBRARIES = lib/libsdskv-client.la \
-		  lib/libsdskv-server.la \
-		  lib/libsdskv-bedrock.la
+		  lib/libsdskv-server.la
+if BUILD_BEDROCK
+lib_LTLIBRARIES += lib/libsdskv-bedrock.la
+endif
 
 lib_libsdskv_client_la_SOURCES = src/sdskv-client.c
 
