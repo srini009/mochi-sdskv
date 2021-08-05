@@ -8,6 +8,7 @@
 #include <iostream>
 #include <unordered_map>
 #include <unordered_set>
+#include <sstream>
 #ifdef USE_REMI
     #include <remi/remi-client.h>
     #include <remi/remi-server.h>
