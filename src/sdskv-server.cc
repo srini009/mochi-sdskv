@@ -1125,7 +1125,7 @@ static void sdskv_put_packed_ult(hg_handle_t handle)
     /* interpret buffer as list of keys */
     char* packed_keys = (char*)(val_sizes + in.num_keys);
     /* compute the size of part of the buffer that contain keys */
-    size_t k = 0;
+    size_t k = 0, v = 0;
     for (unsigned i = 0; i < in.num_keys; i++) k += key_sizes[i];
     /* interpret the rest of the buffer as list of values */
     char* packed_vals = packed_keys + k;
