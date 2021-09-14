@@ -10,6 +10,9 @@
 #include <unistd.h>
 #include <margo.h>
 #include <sdskv-server.h>
+#ifdef USE_SYMBIOMON
+#include <symbiomon/symbiomon-server.h>
+#endif
 
 typedef enum
 {
@@ -211,6 +214,20 @@ int main(int argc, char** argv)
                 db_name = x + 1;
                 *x      = '\0';
             }
+#ifdef USE_SYMBIOMON
+            /* initialize SYMBIOMON */
+            struct symbiomon_provider_args args = SYMBIOMON_PROVIDER_ARGS_INIT;
+            args.push_finalize_callback = 0;
+
+            symbiomon_provider_t metric_provider;
+            ret = symbiomon_provider_register(mid, 42, &args, &metric_provider);
+            if(ret != 0)
+                fprintf(stderr, "Error: symbiomon_provider_register() failed. Continuing on.\n");
+           
+            ret = sdskv_provider_set_symbiomon(provider, metric_provider);
+            if(ret != 0)
+                fprintf(stderr, "Error: sdskv_provider_set_symbiomon() failed. Contuinuing on.\n");
+#endif
 
             sdskv_database_id_t db_id;
             sdskv_config_t      db_config

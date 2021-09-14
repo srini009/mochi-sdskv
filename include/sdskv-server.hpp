@@ -193,6 +193,12 @@ class provider {
                                                          post_cb, uargs);
         _CHECK_RET(ret);
     }
+
+#ifdef USE_SYMBIOMON
+    int set_symbiomon_provider(symbiomon_provider_t metric_provider) {
+        return sdskv_provider_set_symbiomon(m_provider, metric_provider);
+    }
+#endif
 };
 
 } // namespace sdskv

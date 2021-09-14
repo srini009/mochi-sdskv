@@ -166,6 +166,35 @@ else
 fi
 AC_SUBST(USE_REMI)
 
+AC_ARG_ENABLE(symbiomon,
+              [AS_HELP_STRING([--enable-symbiomon],[Enable SYMBIOMON monitoring support @<:@default=no@:>@])],
+              [case "${enableval}" in
+                yes) enable_symbiomon="yes" ;;
+                no) enable_symbiomon="no" ;;
+                *) AC_MSG_ERROR(bad value ${enableval} for --enable-symbiomon) ;;
+               esac],
+              [enable_symbiomon="no"]
+)
+
+AM_CONDITIONAL(ENABLE_SYMBIOMON, test x$enable_symbiomon = xyes)
+if test "$enable_symbiomon" = "yes"; then
+        PKG_CHECK_MODULES(SYMBIOMONSERVER, symbiomon-server)
+        PKG_CHECK_MODULES(SYMBIOMONCLIENT, symbiomon-client)
+        AC_DEFINE(USE_SYMBIOMON, 1, [SYMBIOMON support enabled.])
+        SERVER_DEPS_PKG="${SERVER_DEPS_PKG} symbiomon-server"
+        CLIENT_DEPS_PKG="${SERVER_DEPS_PKG} symbiomon-client"
+        USE_SYMBIOMON=1
+        LIBS="$SYMBIOMONSERVER_LIBS $LIBS"
+        CPPFLAGS="$SYMBIOMONSERVER_CFLAGS $CPPFLAGS -DUSE_SYMBIOMON"
+        CFLAGS="$SYMBIOMONSERVER_CFLAGS $CFLAGS -DUSE_SYMBIOMON"
+        LIBS="$SYMBIOMONCLIENT_LIBS $LIBS"
+        CPPFLAGS="$SYMBIOMONCLIENT_CFLAGS $CPPFLAGS -DUSE_SYMBIOMON"
+        CFLAGS="$SYMBIOMONCLIENT_CFLAGS $CFLAGS -DUSE_SYMBIOMON"
+else
+        USE_SYMBIOMON=0
+fi
+AC_SUBST(USE_SYMBIOMON)
+
 AC_ARG_ENABLE(bedrock,
               [AS_HELP_STRING([--enable-bedrock],[Enable Bedrock (Mochi loader) support @<:@default=no@:>@])],
               [case "${enableval}" in

@@ -9,6 +9,11 @@
 
 #include <margo.h>
 #include <sdskv-common.h>
+#ifdef USE_SYMBIOMON
+#include <symbiomon/symbiomon-server.h>
+#include <symbiomon/symbiomon-metric.h>
+#include <symbiomon/symbiomon-common.h>
+#endif
 
 #ifdef __cplusplus
 extern "C" {
@@ -74,6 +79,11 @@ int sdskv_provider_register(margo_instance_id                      mid,
                             uint16_t                               provider_id,
                             const struct sdskv_provider_init_info* args,
                             sdskv_provider_t*                      provider);
+
+#ifdef USE_SYMBIOMON
+/* Set symbiomon_provider_t instance for metrics reporting*/
+int sdskv_provider_set_symbiomon(sdskv_provider_t provider, symbiomon_provider_t metric_provider);
+#endif
 
 /**
  * @brief Obtain a JSON string describing provider's configuration
