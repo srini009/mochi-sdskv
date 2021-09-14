@@ -1129,6 +1129,7 @@ static void sdskv_put_packed_ult(hg_handle_t handle)
     for (unsigned i = 0; i < in.num_keys; i++) k += key_sizes[i];
     /* interpret the rest of the buffer as list of values */
     char* packed_vals = packed_keys + k;
+    for(unsigned i=0; i < in.num_keys; i++) v += val_sizes[i];
 
     /* insert key/vals into the DB */
     double data_size = (double)v+k;
