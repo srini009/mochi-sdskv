@@ -1027,21 +1027,26 @@ static void sdskv_put_multi_ult(hg_handle_t handle)
     uint64_t                 vals_offset = sizeof(hg_size_t) * in.num_keys;
     std::vector<const void*> kptrs(in.num_keys);
     std::vector<const void*> vptrs(in.num_keys);
+    size_t tot_key_size, tot_val_size = 0;
     for (unsigned i = 0; i < in.num_keys; i++) {
         kptrs[i] = local_keys_buffer.data() + keys_offset;
         vptrs[i] = val_sizes[i] == 0 ? nullptr
                                      : local_vals_buffer.data() + vals_offset;
         keys_offset += key_sizes[i];
         vals_offset += val_sizes[i];
+	tot_key_size += key_sizes[i];
+	tot_val_size += val_sizes[i];
     }
 
     double start = ABT_get_wtime();
     double end;
 
+
 #ifdef USE_SYMBIOMON
     symbiomon_metric_update_gauge_by_fixed_amount(provider->putpacked_num_entrants, 1);
 #endif
     out.ret = db->put_multi(in.num_keys, kptrs.data(), key_sizes, vptrs.data(),
+                            val_sizes);
     end = ABT_get_wtime();
 #ifdef USE_SYMBIOMON
     symbiomon_metric_update_gauge_by_fixed_amount(provider->putpacked_num_entrants, -1);
@@ -1049,7 +1054,6 @@ static void sdskv_put_multi_ult(hg_handle_t handle)
     symbiomon_metric_update(provider->put_packed_batch_size, (double)in.num_keys);
     symbiomon_metric_update(provider->put_packed_data_size, (double)tot_key_size+tot_val_size);
 #endif 
-                            val_sizes);
 }
 DEFINE_MARGO_RPC_HANDLER(sdskv_put_multi_ult)
 
@@ -1128,6 +1132,7 @@ static void sdskv_put_packed_ult(hg_handle_t handle)
 
     /* insert key/vals into the DB */
     double data_size = (double)v+k;
+    double start, end;
     /* insert key/vals into the DB */
     start = ABT_get_wtime();
 #ifdef USE_SYMBIOMON
