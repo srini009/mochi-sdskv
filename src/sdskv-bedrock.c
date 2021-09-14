@@ -38,6 +38,7 @@ static int sdskv_register_provider(bedrock_args_t             args,
 #ifdef USE_SYMBIOMON
             /* initialize SYMBIOMON */
             struct symbiomon_provider_args args = SYMBIOMON_PROVIDER_ARGS_INIT;
+	    int ret;
             args.push_finalize_callback = 0;
 
             symbiomon_provider_t metric_provider;
