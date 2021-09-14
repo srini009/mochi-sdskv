@@ -2769,7 +2769,6 @@ static void sdskv_server_finalize_cb(void* data)
     char * pid_pds = (char*)malloc(40);
     char * pid_pl = (char*)malloc(40);
     char * pid_pne = (char*)malloc(40);
-    char * pid_lkvne = (char*)malloc(40);
     sprintf(pid_s, "sdskv_putpacked_latency_%d_%d", pid, provider->provider_id);
     sprintf(pid_bs, "sdskv_putpacked_batch_size_%d_%d", pid, provider->provider_id);
     sprintf(pid_ds, "sdskv_putpacked_data_size_%d_%d", pid, provider->provider_id);
@@ -2784,6 +2783,8 @@ static void sdskv_server_finalize_cb(void* data)
     symbiomon_metric_dump_raw_data(provider->put_data_size, pid_pds);
     symbiomon_metric_dump_raw_data(provider->put_latency, pid_pl);
     symbiomon_metric_dump_raw_data(provider->putpacked_num_entrants, pid_pne);
+    free(pid_s); free(pid_bs);  free(pid_ds); free(pid_ne); free(pid_pds); 
+    free(pid_pl); free(pid_pne);
 #endif
 
     sdskv_provider_remove_all_databases(provider);
