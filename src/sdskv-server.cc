@@ -937,14 +937,14 @@ static void sdskv_put_ult(hg_handle_t handle)
     double start = ABT_get_wtime();
 
 #ifdef USE_SYMBIOMON
-    symbiomon_metric_update_gauge_by_fixed_amount(provider->put_num_entrants, 1);
+    //symbiomon_metric_update_gauge_by_fixed_amount(provider->put_num_entrants, 1);
 #endif
     out.ret = db->put(kdata, vdata);
 
     double end = ABT_get_wtime();
 
 #ifdef USE_SYMBIOMON
-    symbiomon_metric_update_gauge_by_fixed_amount(provider->put_num_entrants, -1);
+    //symbiomon_metric_update_gauge_by_fixed_amount(provider->put_num_entrants, -1);
     symbiomon_metric_update(provider->put_latency, (end-start));
     symbiomon_metric_update(provider->put_data_size, (double)(in.key.size+in.value.size));
 #endif 
@@ -2773,13 +2773,13 @@ static void sdskv_server_finalize_cb(void* data)
     sprintf(pid_bs, "sdskv_putpacked_batch_size_%d_%d", pid, provider->provider_id);
     sprintf(pid_ds, "sdskv_putpacked_data_size_%d_%d", pid, provider->provider_id);
     sprintf(pid_pne, "sdskv_putpacked_num_entrants_%d_%d", pid, provider->provider_id);
-    sprintf(pid_ne, "sdskv_put_num_entrants_%d_%d", pid, provider->provider_id);
+    //sprintf(pid_ne, "sdskv_put_num_entrants_%d_%d", pid, provider->provider_id);
     sprintf(pid_pds, "sdskv_put_data_size_%d_%d", pid, provider->provider_id);
     sprintf(pid_pl, "sdskv_put_latency_%d_%d", pid, provider->provider_id);
     symbiomon_metric_dump_raw_data(provider->put_packed_latency, pid_s);
     symbiomon_metric_dump_raw_data(provider->put_packed_batch_size, pid_bs);
     symbiomon_metric_dump_raw_data(provider->put_packed_data_size, pid_ds);
-    symbiomon_metric_dump_raw_data(provider->put_num_entrants, pid_ne);
+    //symbiomon_metric_dump_raw_data(provider->put_num_entrants, pid_ne);
     symbiomon_metric_dump_raw_data(provider->put_data_size, pid_pds);
     symbiomon_metric_dump_raw_data(provider->put_latency, pid_pl);
     symbiomon_metric_dump_raw_data(provider->putpacked_num_entrants, pid_pne);
