@@ -42,7 +42,7 @@ static int sdskv_register_provider(bedrock_args_t             args,
             args.push_finalize_callback = 0;
 
             symbiomon_provider_t metric_provider;
-            ret = symbiomon_provider_register(mid, 42, &args, &metric_provider);
+            ret = symbiomon_provider_register(mid, provider_id, &args, &metric_provider);
             if(ret != 0)
                 fprintf(stderr, "Error: symbiomon_provider_register() failed. Continuing on.\n");
            
