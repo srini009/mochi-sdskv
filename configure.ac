@@ -166,6 +166,17 @@ else
 fi
 AC_SUBST(USE_REMI)
 
+AC_ARG_ENABLE(aggr_service,
+              [AS_HELP_STRING([--enable-aggr-service],[Build SDSKV aggr service @<:@default=no@:>@])],
+              [case "${enableval}" in
+                yes) enable_aggr_service="yes" ;;
+                no) enable_aggr_service="no" ;;
+                *) AC_MSG_ERROR(bad value ${enableval} for --enable-aggr-service) ;;
+               esac],
+              [enable_aggr_service="no"]
+)
+AM_CONDITIONAL(BUILD_AGGR_SERVICE, test x$enable_aggr_service = xyes)
+
 AC_ARG_ENABLE(symbiomon,
               [AS_HELP_STRING([--enable-symbiomon],[Enable SYMBIOMON monitoring support @<:@default=no@:>@])],
               [case "${enableval}" in

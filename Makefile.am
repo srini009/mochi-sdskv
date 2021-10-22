@@ -8,6 +8,10 @@ AM_CPPFLAGS = -I${srcdir}/src -I${srcdir}/include
 bin_PROGRAMS = bin/sdskv-server-daemon 	    \
 	       bin/sdskv-shutdown
 
+if BUILD_AGGR_SERVICE
+bin_PROGRAMS += bin/sdskv-aggr-service
+endif
+
 if BUILD_BENCHMARK
 bin_PROGRAMS += bin/sdskv-benchmark
 endif
@@ -27,6 +31,13 @@ check_PROGRAMS = test/sdskv-open-test              \
 		 test/sdskv-packed-test            \
 		 test/sdskv-cxx-test               \
 		 test/sdskv-custom-server-daemon
+
+if BUILD_AGGR_SERVICE
+bin_sdskv_aggr_service_SOURCES = src/sdskv-aggr-service.cc
+bin_sdskv_aggr_service_DEPENDENCIES = lib/libsdskv-server.la
+bin_sdskv_aggr_service_LDFLAGS = -Llib -lsdskv-server
+bin_sdskv_aggr_service_LDADD = ${LIBS} -lsdskv-server ${SERVER_LIBS}
+endif
 
 bin_sdskv_server_daemon_SOURCES = src/sdskv-server-daemon.cc
 bin_sdskv_server_daemon_DEPENDENCIES = lib/libsdskv-server.la
