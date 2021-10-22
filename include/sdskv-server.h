@@ -9,6 +9,7 @@
 
 #include <margo.h>
 #include <sdskv-common.h>
+
 #ifdef USE_SYMBIOMON
 #include <symbiomon/symbiomon-server.h>
 #include <symbiomon/symbiomon-metric.h>

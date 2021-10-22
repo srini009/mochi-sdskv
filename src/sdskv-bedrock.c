@@ -1,6 +1,7 @@
 #include <bedrock/module.h>
 #include "sdskv-server.h"
 #include "sdskv-client.h"
+
 #ifdef USE_SYMBIOMON
 #include <symbiomon/symbiomon-server.h>
 #endif
