@@ -586,6 +586,8 @@ sdskv_provider_register(margo_instance_id                      mid,
         return ret;
     }
 
+    provider->metric_provider = NULL;
+
     if (provider != SDSKV_PROVIDER_IGNORE) *provider = tmp_provider;
 
     return SDSKV_SUCCESS;
