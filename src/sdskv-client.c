@@ -1,3 +1,4 @@
+#include <stdlib.h>
 #include "sdskv-client.h"
 #include "sdskv-rpc-types.h"
 
