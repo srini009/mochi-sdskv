@@ -588,7 +588,7 @@ sdskv_provider_register(margo_instance_id                      mid,
     }
 
 #ifdef USE_SYMBIOMON
-    provider->metric_provider = NULL;
+    tmp_provider->metric_provider = NULL;
 #endif
 
     if (provider != SDSKV_PROVIDER_IGNORE) *provider = tmp_provider;
