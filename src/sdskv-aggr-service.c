@@ -206,6 +206,7 @@ int main(int argc, char **argv)
         char self_addr_str[128];
         hg_size_t self_addr_str_sz = 128;
         hg_return_t hret;
+        fprintf(stderr, "Writing addresses to host file...\n");
 
         /* figure out what address this server is listening on */
         hret = margo_addr_self(mid, &self_addr);
@@ -242,6 +243,7 @@ int main(int argc, char **argv)
 	int i = 0;
 	for(i = 0; i < size; i++) {
         	if(rank == i) {
+		    fprintf(stderr, "Rank: %d is writing out its address..\n", i);
 	            fp = fopen(opts.host_file, "a");
 	            if(!fp)
         	    {
