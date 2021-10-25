@@ -142,7 +142,7 @@ int main(int argc, char **argv)
         args.json_config = NULL;
         args.rpc_pool = SDSKV_ABT_POOL_DEFAULT;
 	ret = sdskv_provider_register(mid, 1,
-                args,
+                &args,
                 &provider);
 
         if(ret != 0)
