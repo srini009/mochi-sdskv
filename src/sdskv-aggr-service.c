@@ -137,8 +137,12 @@ int main(int argc, char **argv)
     /* initialize the SDSKV server */
     	int i;
 	sdskv_provider_t provider;
+        struct sdskv_provider_init_info args
+            = SDSKV_PROVIDER_INIT_INFO_INIT;
+        args.json_config = NULL;
+        args.rpc_pool = SDSKV_ABT_POOL_DEFAULT;
 	ret = sdskv_provider_register(mid, 1,
-                SDSKV_PROVIDER_INIT_INFO_INIT,
+                args,
                 &provider);
 
         if(ret != 0)
