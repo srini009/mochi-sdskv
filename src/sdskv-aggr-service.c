@@ -138,7 +138,7 @@ int main(int argc, char **argv)
     	int i;
 	sdskv_provider_t provider;
 	ret = sdskv_provider_register(mid, 1,
-                SDSKV_ABT_POOL_DEFAULT,
+                SDSKV_PROVIDER_INIT_INFO_INIT,
                 &provider);
 
         if(ret != 0)
