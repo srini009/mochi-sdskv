@@ -188,12 +188,12 @@ int main(int argc, char **argv)
 
 #ifdef USE_SYMBIOMON
         /* initialize SYMBIOMON */
-        struct symbiomon_provider_args args = SYMBIOMON_PROVIDER_ARGS_INIT;
-        args.push_finalize_callback = 0;
+        struct symbiomon_provider_args metric_args = SYMBIOMON_PROVIDER_ARGS_INIT;
+        metric_args.push_finalize_callback = 0;
 
 
         symbiomon_provider_t metric_provider;
-        ret = symbiomon_provider_register(mid, 42, &args, &metric_provider);
+        ret = symbiomon_provider_register(mid, 42, &metric_args, &metric_provider);
         if(ret != 0)
             fprintf(stderr, "Error: symbiomon_provider_register() failed. Continuing on.\n");
            
