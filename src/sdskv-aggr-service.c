@@ -125,7 +125,7 @@ int main(int argc, char **argv)
 
     /* start margo */
     /* use the main xstream for driving progress and executing rpc handlers */
-    mid = margo_init(opts.listen_addr_str, MARGO_SERVER_MODE, 1, -1);
+    mid = margo_init(opts.listen_addr_str, MARGO_SERVER_MODE, 0, -1);
     if(mid == MARGO_INSTANCE_NULL)
     {
         fprintf(stderr, "Error: margo_init()\n");
