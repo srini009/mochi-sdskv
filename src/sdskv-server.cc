@@ -2965,7 +2965,7 @@ static int populate_provider_from_config(sdskv_provider_t provider)
             db_cfg.db_type = KVDB_FORWARDDB;
         else {
             SDSKV_LOG_ERROR(provider->mid, "unknown database type \"%s\"",
-                            type);
+                            type.c_str());
             ret = SDSKV_ERR_CONFIG;
             break;
         }
